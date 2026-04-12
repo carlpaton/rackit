@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Rackit
+
+A Pool Tournament App. Create and manage tournaments with group stage round-robin and single elimination knockout. Built with Next.js 16, MongoDB, and NextAuth.js.
+
+Live: https://rackit.vercel.app
+
+---
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies and run the development server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Contributing
 
-## Learn More
+Rackit uses a two-step AI-assisted contribution workflow: **author** then **execute**.
 
-To learn more about Next.js, take a look at the following resources:
+### Step 1 — Author the PRD
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Use the `/prd` skill in Claude Code to add your feature or change to `PRD.json`. The skill will grill you with questions (with recommended answers) until it has enough detail to write a clear, well-scoped PRD item.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# Open Claude Code, then:
+/prd add [describe your feature]
+```
 
-## Deploy on Vercel
+The skill handles:
+- Asking clarifying questions with recommended answers
+- Breaking work into appropriately sized items
+- Setting dependencies between items (`dependsOn`)
+- Adding deterministic steps where the implementation sequence is clear
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Review `PRD.json` before moving to Step 2. Each item should be small enough to implement in a single AI context window. Split anything too large.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Step 2 — Execute with Ralph Loop
+
+Once the PRD is ready, run the Ralph Loop inside Claude Code:
+
+```
+/ralph-loop "Work through PRD.json, implement each todo item in dependency order, commit after each, and mark done. Stop when all items are done." --max-iterations 20 --completion-promise "COMPLETE"
+```
+
+Ralph picks up each `todo` item in dependency order, implements it, commits, and marks it `done`. It does **not** pause between items for human approval — it moves straight to the next task automatically.
+
+Two ways to run it:
+
+- **Supervised** — watch each iteration and cancel with `/cancel-ralph` before the next task starts if something looks wrong. Recommended until you trust your PRD quality.
+- **AFK** — walk away and come back to finished code. Risk: if an early item is wrong, Ralph builds subsequent items on top of the bug.
+
+**Always review the git commits when Ralph finishes** — each completed item is a separate commit. Review the diff, test it locally, and approve or rework before merging. Running Ralph on a feature branch and reviewing it as a PR is the safest approach.
+
+> See `docs/ralph-loop.md` for full documentation including cost guidance, dependency handling, and when not to use Ralph.
+
+---
+
+## Further Reading
+
+- `CLAUDE.md` — project brief, tournament rules, and coding conventions for AI agents
+- `docs/steps.md` — full setup playbook for replicating this project from scratch
+- `docs/ralph-loop.md` — how the Ralph Loop works and when to use it

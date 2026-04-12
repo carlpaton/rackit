@@ -67,3 +67,4 @@ import { Trophy, Users, Table2 } from "lucide-react"
 - **Don't** use `"use client"` unless the component needs state, effects, or browser events
 - **Don't** create a new shadcn component if one already exists in `src/components/ui/`
 - **Don't** use arbitrary Tailwind colours — always use the palette tokens above
+- **Don't** create a `tailwind.config.js` — this project uses Tailwind v4, all config is in `src/app/globals.css`
