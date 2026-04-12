@@ -76,9 +76,13 @@ GitHub: https://github.com/carlpaton/rackit
 | Hosting | Vercel |
 
 ### Key Conventions
-- Use the **App Router** (`app/` directory), not Pages Router
+- Use the **App Router** (`src/app/` directory), not Pages Router
 - `proxy.ts` is used instead of `middleware.ts` (Next.js 16 convention)
 - MongoDB connections use lazy initialisation — check `mongoose.connection.readyState` before connecting and reuse existing connections
 - Avoid re-registering Mongoose models: use `mongoose.models.ModelName || mongoose.model("ModelName", schema)`
 - Auth session data is available via NextAuth.js `auth()` helper in server components and `useSession()` in client components
 - Route protection is handled at the `proxy.ts` level, not per-page
+
+---
+
+@AGENTS.md
