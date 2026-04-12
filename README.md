@@ -21,7 +21,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Contributing
 
-Rackit uses a two-step AI-assisted contribution workflow: **author** then **execute**.
+Rackit uses an AI-assisted contribution workflow: **author**, **branch**, then **execute**.
 
 ### Step 1 — Author the PRD
 
@@ -40,9 +40,22 @@ The skill handles:
 
 Review `PRD.json` before moving to Step 2. Each item should be small enough to implement in a single AI context window. Split anything too large.
 
-### Step 2 — Execute with Ralph Loop
+### Step 2 — Create a Branch
 
-Once the PRD is ready, run the Ralph Loop inside Claude Code:
+Before running Ralph, create a branch so main stays clean and deployable:
+
+```bash
+git checkout -b ralph/batch-1
+```
+
+Name the branch to reflect what's being built (e.g., `ralph/auth`, `ralph/tournament-groups`). Ralph will commit each completed PRD item to this branch. When the run is done, open a PR into main and review it there.
+
+### Step 3 — Execute with Ralph Loop
+
+**Pre-requisite:** Install the Ralph Loop plugin in Claude Code before first use:
+https://claude.com/plugins/ralph-loop
+
+Once installed and the PRD is ready, run the Ralph Loop inside Claude Code:
 
 ```
 /ralph-loop "Work through PRD.json, implement each todo item in dependency order, commit after each, and mark done. Stop when all items are done." --max-iterations 20 --completion-promise "COMPLETE"
