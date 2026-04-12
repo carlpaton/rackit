@@ -20,8 +20,8 @@ This gives you:
 - `@/*` import alias mapped to `src/`
 - Turbopack (default in Next.js 16)
 
-## 3. Create .gitignore
-Create `.gitignore` at the repo root. Include Claude-specific local files that should not be committed:
+## 3. Update .gitignore
+`create-next-app` generates a `.gitignore` automatically. Extend it with Claude-specific local files that should not be committed:
 
 ```
 # Claude Code — local files
@@ -54,9 +54,9 @@ Thumbs.db
 ```
 
 ## 4. Claude Init — Create CLAUDE.md
-Run `/init` in Claude Code to generate a base `CLAUDE.md`. Then build it out:
-- Use `/prd` grill mode and conversation to define the full product brief
-- Document: tournament format, match rules, user roles, tech stack, key conventions
+Run `/init` in Claude Code to generate a base `CLAUDE.md`. Then build it out through conversation with Claude — ask clarifying questions about the product brief and let Claude document the answers:
+- Tournament format, match rules, user roles
+- Tech stack and key coding conventions
 
 Key conventions to document:
 - App Router only (`src/app/`)
@@ -126,14 +126,22 @@ Create `PRD.json` at the repo root — the source of truth for the Ralph Loop:
 
 Populate using `/prd` in Claude Code.
 
-## 9. Push and Connect Vercel
+## 9. Install Ralph Loop Plugin
+Install the Ralph Loop plugin in Claude Code from the plugin registry:
+https://claude.com/plugins/ralph-loop
+
+This enables the `/ralph-loop` slash command used to action the PRD autonomously.
+
+> See `docs/ralph-loop.md` for full usage guidance.
+
+## 10. Push and Connect Vercel
 - Commit and push to `main` (VS Code Git handles auth via Windows Credential Manager)
 - Go to https://vercel.com/new → import the GitHub repo
 - Vercel auto-detects Next.js — click Deploy
 - Every push to `main` triggers a production deployment
 - Live at: https://rackit.vercel.app/
 
-## 10. Add Environment Variables to Vercel
+## 11. Add Environment Variables to Vercel
 Via Vercel dashboard → Project → Settings → Environment Variables. Add each variable to Production, Preview, and Development environments.
 
 Pull them locally once added:
@@ -168,6 +176,16 @@ To get them:
    - Local: `http://localhost:3000/api/auth/callback/google`
    - Production: `https://rackit.vercel.app/api/auth/callback/google`
 6. Copy the Client ID and Client Secret
+
+---
+
+### `NEXTAUTH_URL`
+The canonical URL of your deployment. NextAuth.js uses this to build callback URLs correctly.
+
+- Local: `http://localhost:3000`
+- Production: `https://rackit.vercel.app`
+
+On Vercel, set only the Production value — Vercel auto-injects `VERCEL_URL` for preview deployments.
 
 ---
 
