@@ -1,0 +1,29 @@
+# Claude Code — local files (personal settings, not shared with team)
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/todos.json
+
+# Next.js
+.next/
+out/
+build/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vercel
+.vercel
+
+# OS
+.DS_Store
+Thumbs.db
