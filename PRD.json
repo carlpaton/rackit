@@ -1,5 +1,50 @@
 {
   "project": "Rackit",
   "description": "Pool Tournament App — group stage round-robin into single elimination knockout",
-  "items": []
+  "items": [
+    {
+      "id": "PRD-001",
+      "status": "done",
+      "heading": "Set up environment variables",
+      "description": "Create the local environment variable file and commit a .env.example so any developer cloning the repo knows what to configure. Required variables: MONGODB_URI (MongoDB Atlas mongodb+srv:// connection string), NEXTAUTH_SECRET (random string — generate with `openssl rand -base64 32` — used to sign cookies and JWTs), NEXTAUTH_URL (canonical app URL: http://localhost:3000 for local dev, Vercel deployment URL in production). Google OAuth vars (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) are out of scope until Google auth is added. Acceptance criteria: app boots locally with .env.local in place; .env.example is committed with placeholder values and a comment explaining each variable; .env.local is gitignored.",
+      "steps": [
+        "Confirm .env.local is listed in .gitignore (add it if missing)",
+        "Create .env.local with: MONGODB_URI, NEXTAUTH_SECRET, NEXTAUTH_URL",
+        "Generate NEXTAUTH_SECRET value with: openssl rand -base64 32",
+        "Set NEXTAUTH_URL=http://localhost:3000 for local dev",
+        "Create .env.example committed to the repo with placeholder values and a comment above each variable explaining what it is and how to obtain it"
+      ],
+      "dependsOn": []
+    },
+    {
+      "id": "PRD-002",
+      "status": "todo",
+      "heading": "Configure NextAuth.js v5 Credentials provider",
+      "description": "Set up the authentication infrastructure using NextAuth.js v5's built-in Credentials provider. This establishes the session cookie that will later be shared with Google OAuth — no migration needed when Google is added. Includes: installing bcryptjs for password hashing, creating the Mongoose USERS model (fields: email with unique index, passwordHash, createdAt), wiring the Credentials provider into the NextAuth config, and confirming the MongoDB adapter is active. Acceptance criteria: a valid email/password pair produces a NextAuth session cookie; an invalid pair returns an auth error; passwords are never stored in plain text.",
+      "steps": [
+        "Install bcryptjs and @types/bcryptjs",
+        "Create Mongoose USERS model with fields: email (unique index), passwordHash, createdAt",
+        "Add Credentials provider to NextAuth config (auth.ts / NextAuth options) — provider validates email + bcrypt.compare against stored hash",
+        "Confirm MongoDB adapter is configured in NextAuth options",
+        "Smoke-test: signing in with valid credentials sets a session cookie; invalid credentials return an error"
+      ],
+      "dependsOn": ["PRD-001"]
+    },
+    {
+      "id": "PRD-003",
+      "status": "todo",
+      "heading": "Registration and login pages with session cookie",
+      "description": "Build the registration and login UI flows that sit on top of the Credentials provider (PRD-002). Registration: email + password form, server action hashes the password with bcrypt, writes the user to the USERS collection, then calls NextAuth signIn to issue the session cookie, and redirects to /dashboard. Login: email + password form, delegates to NextAuth Credentials provider, redirects to /dashboard on success. Duplicate email on registration must show a generic error (e.g. 'Registration failed — please try again') without revealing the email already exists. The /dashboard route must be protected in proxy.ts so unauthenticated users are redirected to /login.",
+      "steps": [
+        "Create /app/register page and form (email, password fields)",
+        "Create server action for registration: validate inputs, bcrypt.hash password, insert into USERS, call signIn('credentials'), redirect to /dashboard",
+        "Show generic error on duplicate email — do not reveal the email is taken",
+        "Create /app/login page and form (email, password fields)",
+        "Create server action for login: call signIn('credentials'), redirect to /dashboard on success, show error on failure",
+        "Protect /dashboard in proxy.ts — redirect unauthenticated requests to /login",
+        "Create placeholder /app/dashboard page (can be minimal — just confirms the user is logged in)"
+      ],
+      "dependsOn": ["PRD-002"]
+    }
+  ]
 }

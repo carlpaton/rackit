@@ -2,6 +2,7 @@
 CLAUDE.local.md
 .claude/settings.local.json
 .claude/todos.json
+.claude/ralph-loop.local.md
 
 # Next.js
 .next/

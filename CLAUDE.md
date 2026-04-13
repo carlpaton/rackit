@@ -71,9 +71,11 @@ GitHub: https://github.com/carlpaton/rackit
 |---|---|
 | Framework | Next.js 16 (App Router, Turbopack) |
 | Frontend | React 19.2 |
-| Database | MongoDB (via Mongoose) |
+| Database | MongoDB (via Mongoose — see note below) |
 | Auth | NextAuth.js v5 (Auth.js) — Google OAuth provider + MongoDB adapter |
 | Hosting | Vercel |
+
+> **Mongoose** is an ODM (Object Document Mapper) — a library that sits on top of MongoDB and lets you define schemas and models in code. MongoDB itself imposes no structure on documents; Mongoose adds that discipline at the application level. Think of it as the MongoDB equivalent of an ORM.
 
 ### Key Conventions
 - Use the **App Router** (`src/app/` directory), not Pages Router
