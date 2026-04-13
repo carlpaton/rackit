@@ -1,7 +1,7 @@
 /**
- * Seed users from scripts/seed-users.txt into MongoDB.
+ * Seed users from scripts/data.txt into MongoDB.
  *
- * Each non-blank line in seed-users.txt is treated as an email address.
+ * Each non-blank line in data.txt is treated as an email address.
  * Display name is derived from the part before the @.
  * Existing users (matched by email) are skipped.
  *
@@ -18,7 +18,7 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
 
-const DATA_FILE = path.join(__dirname, "seed-users.txt");
+const DATA_FILE = path.join(__dirname, "data.txt");
 
 const passwordArg = process.argv.indexOf("--password");
 const password =
@@ -44,7 +44,7 @@ async function main() {
     return;
   }
 
-  console.log(`Found ${users.length} users in seed-users.txt`);
+  console.log(`Found ${users.length} users in data.txt`);
 
   const client = new MongoClient(process.env.MONGODB_URI);
   await client.connect();
