@@ -201,6 +201,6 @@ To get it:
 1. Go to https://cloud.mongodb.com/
 2. Create a free cluster (M0)
 3. Database Access → Add a database user
-4. Network Access → Allow access from anywhere (`0.0.0.0/0`) for Vercel
+4. Network Access → Allow access from anywhere (`0.0.0.0/0`) for Vercel (Org -> Project -> Security -> Database & Network Access -> IP Access List)
 5. Clusters → Connect → Connect your application → copy the connection string
 6. Replace `<password>` with your database user's password and `<dbname>` with `rackit`
