@@ -14,6 +14,8 @@ export async function register(
 ): Promise<RegisterState> {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   const password = formData.get("password") as string;
+  const rawDisplayName = (formData.get("displayName") as string)?.trim();
+  const displayName = rawDisplayName || email?.split("@")[0] || "";
 
   if (!email || !password) {
     return { error: "Email and password are required." };
@@ -26,7 +28,7 @@ export async function register(
 
   try {
     const passwordHash = await bcrypt.hash(password, 12);
-    await User.create({ email, passwordHash });
+    await User.create({ email, passwordHash, displayName });
   } catch {
     // Duplicate key error (code 11000) or any other DB error —
     // return a generic message that doesn't reveal whether the email exists

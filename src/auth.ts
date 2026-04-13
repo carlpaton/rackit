@@ -16,6 +16,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     authorized({ auth: session }) {
       return !!session?.user;
     },
+    async jwt({ token, user }) {
+      if (user) {
+        token.displayName =
+          user.displayName ?? token.email?.split("@")[0] ?? "";
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      session.user.id = token.sub!;
+      session.user.displayName = token.displayName as string | undefined;
+      return session;
+    },
   },
   providers: [
     Credentials({
@@ -38,7 +50,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
         if (!isValid) return null;
 
-        return { id: user._id.toString(), email: user.email };
+        return {
+          id: user._id.toString(),
+          email: user.email,
+          displayName: user.displayName,
+        };
       },
     }),
   ],

@@ -45,6 +45,135 @@
         "Create placeholder /app/dashboard page (can be minimal — just confirms the user is logged in)"
       ],
       "dependsOn": ["PRD-002"]
+    },
+    {
+      "id": "PRD-004",
+      "status": "done",
+      "heading": "Add display name to registration",
+      "description": "Extend the registration flow and USERS model to capture an optional display name, used wherever player names appear in the app (doubles half-team list, group standings, bracket, etc.). Add a displayName field (string, required at DB level but pre-populated so the user never has to type it) to the USERS Mongoose model. On the registration form, show an optional 'Display name' text input that is pre-populated client-side with the email prefix (everything before the @) as the default. The server action saves whatever value is in the field — if the user clears it, fall back to the email prefix. Display name does not need to be unique. Acceptance criteria: USERS model has a displayName field; the registration form shows and pre-populates the field; the stored displayName is used everywhere a user's name is displayed; existing users created before this change are not broken (displayName can be derived from email at read time if null).",
+      "steps": [],
+      "dependsOn": ["PRD-003"]
+    },
+    {
+      "id": "PRD-005",
+      "status": "done",
+      "heading": "Tournament and Team Mongoose models",
+      "description": "Define the core data models that underpin all tournament functionality. Tournament model fields: name (string, required), mode ('singles' | 'doubles', required), status ('open' | 'in-progress' | 'complete', default 'open'), organizerUserId (ObjectId ref USERS, required), createdAt. Team model fields: tournamentId (ObjectId ref TOURNAMENT, required), userIds (array of ObjectId ref USERS, max 1 for singles, max 2 for doubles), status ('open' | 'full') where 'open' means a doubles half-team waiting for a second player, createdAt. Acceptance criteria: models are registered following the existing pattern (mongoose.models.X || mongoose.model('X', schema)); indexes on tournamentId in Team; no user can appear in more than one team per tournament (enforced at the application layer in server actions, not a DB constraint for v1).",
+      "steps": [],
+      "dependsOn": ["PRD-004"]
+    },
+    {
+      "id": "PRD-006",
+      "status": "done",
+      "heading": "Dashboard with My Tournaments and Open Tournaments",
+      "description": "Expand the placeholder dashboard (PRD-003) into a functional home screen. Two sections: 'My Tournaments' — tournaments where the logged-in user is a team member or the organizer (show name, mode, status, team count, and a View button); 'Open Tournaments' — tournaments with status=open that the user has not joined and is not the organizer of (show name, mode, team count, and a Join button). A 'Create Tournament' button appears prominently at the top. Acceptance criteria: both sections render correctly; a tournament does not appear in both sections simultaneously; an organizer who has not joined a team sees it in My Tournaments (as organizer) and not in Open Tournaments; empty state messages are shown when a section has no items.",
+      "steps": [],
+      "dependsOn": ["PRD-005"]
+    },
+    {
+      "id": "PRD-007",
+      "status": "done",
+      "heading": "Create a tournament",
+      "description": "Allow any logged-in user to create a new tournament, becoming its organizer. Form fields: Name (text, required), Mode (Singles / Doubles radio, required). On submit: a server action creates the Tournament record with status='open' and organizerUserId set to the current user, then redirects to the dashboard. The organizer is not automatically added as a team — they join separately if they want to play. Acceptance criteria: tournament appears in the creator's 'My Tournaments' section immediately; it also appears in other users' 'Open Tournaments'; name is required (show inline error if blank); mode selection is required.",
+      "steps": [],
+      "dependsOn": ["PRD-006"]
+    },
+    {
+      "id": "PRD-008",
+      "status": "done",
+      "heading": "Join a tournament (singles and doubles flow)",
+      "description": "Allow a logged-in user to join an open tournament. Singles flow: a single 'Join' button on the dashboard creates a Team record with the user's id and status='full', then refreshes the dashboard. Doubles flow: clicking 'Join' opens a page or modal showing (a) a list of open half-teams (Teams with status='open' in this tournament — show the waiting player's displayName) with a 'Join Team' button per row, and (b) a 'Start a new half-team' option that creates a Team with status='open' and the user's id. Joining an open half-team adds the user to that Team's userIds and sets status='full'. Guard: if the user already has a team in this tournament, the Join button is hidden and replaced with a 'You're in' indicator. A user may not join if the tournament status is not 'open'. Acceptance criteria: singles join is one click; doubles shows available half-teams and the new-half-team option; joining a half-team marks it full; a user cannot join the same tournament twice.",
+      "steps": [],
+      "dependsOn": ["PRD-007"]
+    },
+    {
+      "id": "PRD-009",
+      "status": "done",
+      "heading": "Leave a tournament before it starts",
+      "description": "Allow a user to leave a tournament while it is still in 'open' status. Singles: removes the user's Team record entirely. Doubles full team (status='full'): the leaving user is removed from userIds and the team reverts to status='open' so the remaining player becomes an open half-team again. Doubles half-team (status='open', only one member): the Team record is deleted. Leaving is only permitted while tournament status='open' — once 'in-progress' or 'complete', the option is hidden. Acceptance criteria: after leaving, the tournament moves from 'My Tournaments' to 'Open Tournaments' for that user; a doubles partner's half-team reappears in the open half-teams list; leaving a tournament you're not in is a no-op.",
+      "steps": [],
+      "dependsOn": ["PRD-008"]
+    },
+    {
+      "id": "PRD-010",
+      "status": "done",
+      "heading": "Start a tournament (organizer action)",
+      "description": "Allow the organizer to lock the roster and move the tournament from 'open' to 'in-progress'. A 'Start Tournament' button is visible only to the organizer on their tournament's detail or dashboard card, and only when: status='open' and there are at least 2 full teams (teams with status='full'). Clicking the button sets tournament status='in-progress', after which no new teams can join and no existing team can leave. Acceptance criteria: button is hidden from non-organizers; button is disabled/hidden if fewer than 2 full teams; after starting, Join and Leave actions are no longer available; the tournament moves to 'in-progress' status in all users' dashboards.",
+      "steps": [],
+      "dependsOn": ["PRD-009"]
+    },
+    {
+      "id": "PRD-011",
+      "status": "done",
+      "heading": "Tournament detail page",
+      "description": "A single adaptive page at /tournament/[id] that renders differently based on the tournament's current status. Open phase: shows the full team roster (team names / player display names), the organizer's 'Start Tournament' button (when conditions are met per PRD-010), and join/leave actions for the current user. In-progress phase: shows two tabs — 'Groups' and 'Bracket'. The Groups tab is active first; it shows each group as a standings table (rank, team, played, won, lost, points) plus the list of that group's matches (team A vs team B, result or 'Pending'). Each unplayed match shows a 'Record Result' button for the organizer (or delegated player per PRD-018) which opens an inline modal with two buttons: one per team, clicking a team marks them as the winner and closes the modal. The Bracket tab is visible but locked (greyed, non-interactive) until the group stage is complete; once complete it unlocks and shows the knockout bracket with the same inline 'Record Result' mechanic on each unplayed match. Complete phase: the Bracket tab is shown by default with all results filled in and the winning team prominently highlighted. All users (organizer and players) can view the full detail page; only the organizer or delegated players can record results. Acceptance criteria: the page renders correctly for all three phases; tab switching works; the Record Result modal correctly updates the match and triggers a standings/bracket refresh; the page is accessible to any authenticated user; the correct tab is shown by default for each phase.",
+      "steps": [],
+      "dependsOn": ["PRD-010"]
+    },
+    {
+      "id": "PRD-012",
+      "status": "done",
+      "heading": "Determine tournament path on start",
+      "description": "When the organizer starts a tournament (PRD-010), the system must immediately determine whether the tournament runs a group stage or goes straight to knockout, based on the number of full teams. Rule: 4 or fewer full teams → straight to knockout; 5 or more full teams → group stage first. This determination is made once at start time and stored on the Tournament record (add a path field: 'group-stage' | 'direct-knockout'). Acceptance criteria: tournaments with ≤4 full teams set path='direct-knockout' and skip group stage; tournaments with ≥5 full teams set path='group-stage'; the path field is set atomically when status transitions to 'in-progress'; no manual override needed.",
+      "steps": [],
+      "dependsOn": ["PRD-011"]
+    },
+    {
+      "id": "PRD-013",
+      "status": "done",
+      "heading": "Generate groups and round-robin schedule",
+      "description": "For tournaments with path='group-stage' (≥5 teams), split full teams into groups and generate all round-robin matches within each group. Grouping: distribute teams as evenly as possible across groups (target 3–4 teams per group, typically 4 groups). Assignment is random. For each group, generate a match record for every unique team pair (round-robin: n*(n-1)/2 matches per group of n teams). Match model fields: tournamentId, groupId (or null for knockout), teamAId, teamBId, winnerId (null until result recorded), phase ('group' | 'knockout'), round (null for group stage), delegatedToTeamId (null by default — see PRD-018), createdAt. Store group membership on a Group model: tournamentId, name (e.g. 'Group A'), teamIds[]. Acceptance criteria: all group matches are generated at once when the group stage is created; no team plays itself; every team plays every other team in their group exactly once; groups and matches are readable from the tournament detail page.",
+      "steps": [],
+      "dependsOn": ["PRD-012"]
+    },
+    {
+      "id": "PRD-014",
+      "status": "done",
+      "heading": "Record group stage results and standings",
+      "description": "Allow the organizer (or a delegated team — PRD-018) to record win/loss results for group stage matches, and display live standings per group. Recording: for each group match, a 'Record Result' action accepts the winning teamId, sets match.winnerId, and is idempotent (re-recording overwrites the previous result). Standings: calculated on the fly from match results — Win = 1 point, Loss = 0 points. Where two or more teams are level on points within a group, resolve the tie using the head-to-head result between those specific teams. Display: each group shows a standings table (rank, team name, played, won, lost, points) and the list of matches with result or 'pending'. Acceptance criteria: recording a result updates standings immediately; tiebreaker is applied correctly; re-recording a result is allowed and updates standings; only the organizer or delegated team can submit results.",
+      "steps": [],
+      "dependsOn": ["PRD-013"]
+    },
+    {
+      "id": "PRD-015",
+      "status": "done",
+      "heading": "Advance top 2 teams from each group",
+      "description": "Once all group stage matches have results recorded, identify the top 2 teams from each group (by points, tiebreaker applied), mark the group stage complete, and produce the list of knockout qualifiers. The system should detect when all group matches have a winnerId and automatically surface an 'Advance to Knockout' action for the organizer to confirm (no silent auto-progression). Acceptance criteria: the action is only available when all group matches have results; the correct 2 teams per group advance (with tiebreaker applied); the list of qualifiers is stored and feeds into PRD-016 bracket generation; teams that did not advance see their tournament journey end.",
+      "steps": [],
+      "dependsOn": ["PRD-014"]
+    },
+    {
+      "id": "PRD-016",
+      "status": "done",
+      "heading": "Generate knockout bracket",
+      "description": "Generate the single-elimination knockout bracket. Input: for path='group-stage', the qualifiers from PRD-015; for path='direct-knockout', all full teams. Seeding is random — no cross-group seeding logic. If the number of teams does not fill a clean power-of-2 bracket, randomly assign byes; a team with a bye automatically advances to the next round. Bracket structure: determine rounds based on team count (e.g. 8 teams → QF, SF, Final; 4 teams → SF, Final; 2 teams → Final). Generate match records for the first knockout round (phase='knockout', round='QF'/'SF'/'Final' as appropriate), with teamBId=null for bye slots. Acceptance criteria: bracket is generated in one operation; byes are randomly and fairly distributed; the bracket structure correctly reflects the team count; first-round matches are visible on the tournament detail page.",
+      "steps": [],
+      "dependsOn": ["PRD-015"]
+    },
+    {
+      "id": "PRD-017",
+      "status": "done",
+      "heading": "Record knockout results and advance winners",
+      "description": "Allow the organizer (or delegated team — PRD-018) to record win/loss results for knockout matches, automatically advancing the winner to the next round and eliminating the loser. When a result is recorded for a knockout match, create the next-round match record if both slots for that match are now filled (i.e. both feeder matches have results). Continue until the Final is played. When the Final result is recorded, set tournament.status='complete' and store the winning teamId on the Tournament record. Acceptance criteria: recording a result advances the winner to the next bracket slot; the losing team is eliminated; the bracket display updates to show the winner; when the Final is resolved, the tournament is marked complete and a winner is displayed; re-recording a knockout result is allowed (overwrites and recalculates downstream if needed — for v1 this is acceptable complexity to skip; just allow correction before the next round is played).",
+      "steps": [],
+      "dependsOn": ["PRD-016"]
+    },
+    {
+      "id": "PRD-018",
+      "status": "done",
+      "heading": "Delegate match result entry to players",
+      "description": "Allow the tournament organizer to delegate result recording for a specific match to the teams playing in it, removing the bottleneck of the organizer recording every result. Delegation is per-match: the organizer can toggle delegation on any unplayed match (group stage or knockout). When delegated, either player in the match's teams can record the result for that match. The organizer retains the ability to record or override any match result at any time regardless of delegation state. Acceptance criteria: organizer sees a 'Delegate' toggle/button on each unplayed match; when delegated, players in that match see a 'Record Result' action; non-delegated matches show no record action to non-organizer players; the organizer can always record or correct any result.",
+      "steps": [],
+      "dependsOn": ["PRD-010"]
+    }
+  ,
+    {
+      "id": "PRD-019",
+      "status": "done",
+      "heading": "Global nav bar with user identity and logout",
+      "description": "Add a persistent header across all authenticated pages showing who is logged in and providing a logout action. The header displays the user's displayName, falling back to their email if displayName is not set. A 'Log out' button calls NextAuth's signOut() and redirects to /login. Implementation requires introducing a Next.js route group (e.g. src/app/(authenticated)/) with a shared layout that renders the header above all authenticated pages (dashboard, tournament pages, etc). The public pages (landing, login, register) are excluded from this layout and keep their current bare appearance. Acceptance criteria: the header is visible on every authenticated page; the displayed name is displayName if set, otherwise email; clicking 'Log out' ends the session and redirects to /login; the header is not shown on /login or /register.",
+      "steps": [],
+      "dependsOn": ["PRD-004"]
     }
   ]
 }

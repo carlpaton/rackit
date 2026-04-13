@@ -19,6 +19,21 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
+## Check Running Instances
+
+```bash
+# Check what's listening on port 3000
+netstat -ano | grep :3000
+
+# List all Node processes
+ps aux | grep node
+
+# Kill by PID (replace 12345 with actual PID from above)
+kill 12345
+```
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.

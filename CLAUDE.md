@@ -21,11 +21,11 @@ GitHub: https://github.com/carlpaton/rackit
 
 ## Tournament Format
 
-### Small Tournaments (no group stage needed)
-- If the team count is small enough, go straight to knockout — no groups required
-- Example: 2 teams → straight to a Final
+### Small Tournaments (4 or fewer teams — no group stage)
+- If the team count is 4 or fewer, go straight to knockout — no groups required
+- Example: 2 teams → straight to a Final; 4 teams → 2 semi-finals then a Final
 
-### Group Stage (triggered when team count warrants it)
+### Group Stage (triggered when team count exceeds 4)
 - Teams are split into groups (typically 4 groups of 3–4 teams)
 - Within each group, teams play a **round-robin** (every team plays every other team once)
 - **Scoring:** Win = 1 point, Loss = 0 points. There are no draws in pool

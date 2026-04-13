@@ -1,0 +1,175 @@
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { connectDB } from "@/lib/db";
+import { Tournament } from "@/models/tournament";
+import { Team } from "@/models/team";
+import { Types } from "mongoose";
+import { buttonVariants } from "@/components/ui/button";
+import { Users, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+export default async function DashboardPage() {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+
+  await connectDB();
+  const userId = new Types.ObjectId(session.user.id);
+
+  const myTeams = await Team.find({ userIds: userId }).lean();
+  const myJoinedTournamentIds = myTeams.map((t) => t.tournamentId);
+
+  const myTournaments = await Tournament.find({
+    $or: [
+      { organizerUserId: userId },
+      { _id: { $in: myJoinedTournamentIds } },
+    ],
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const myTournamentObjectIds = myTournaments.map((t) => t._id);
+
+  const openTournaments = await Tournament.find({
+    status: "open",
+    _id: { $nin: myTournamentObjectIds },
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const allIds = [
+    ...myTournamentObjectIds,
+    ...openTournaments.map((t) => t._id),
+  ];
+
+  const teamCountAgg = await Team.aggregate([
+    { $match: { tournamentId: { $in: allIds }, status: "full" } },
+    { $group: { _id: "$tournamentId", count: { $sum: 1 } } },
+  ]);
+  const countMap: Record<string, number> = Object.fromEntries(
+    teamCountAgg.map((r: { _id: Types.ObjectId; count: number }) => [
+      r._id.toString(),
+      r.count,
+    ])
+  );
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-8 space-y-10">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl text-chalk">Tournaments</h1>
+        <Link
+          href="/tournament/create"
+          className={buttonVariants({ size: "default" })}
+        >
+          <Plus className="size-4" />
+          Create Tournament
+        </Link>
+      </div>
+
+      <section className="space-y-4">
+        <h2 className="text-xl text-chalk border-b border-white/10 pb-2">
+          My Tournaments
+        </h2>
+        {myTournaments.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            You haven&apos;t created or joined any tournaments yet.
+          </p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {myTournaments.map((t) => {
+              const id = t._id.toString();
+              const isOrganizer =
+                t.organizerUserId.toString() === session.user.id;
+              return (
+                <div
+                  key={id}
+                  className="bg-surface rounded-xl p-6 shadow-md flex flex-col gap-4"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="text-chalk text-lg leading-tight">
+                        {t.name}
+                      </h3>
+                      {isOrganizer && (
+                        <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 rounded-full shrink-0">
+                          Organizer
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Users className="size-3" />
+                        {t.mode}
+                      </span>
+                      <span>{countMap[id] ?? 0} teams</span>
+                      <StatusBadge status={t.status} />
+                    </div>
+                  </div>
+                  <Link
+                    href={`/tournament/${id}`}
+                    className={cn(
+                      buttonVariants({ variant: "outline", size: "sm" }),
+                      "w-full"
+                    )}
+                  >
+                    View
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xl text-chalk border-b border-white/10 pb-2">
+          Open Tournaments
+        </h2>
+        {openTournaments.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            No open tournaments available to join.
+          </p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {openTournaments.map((t) => {
+              const id = t._id.toString();
+              return (
+                <div
+                  key={id}
+                  className="bg-surface rounded-xl p-6 shadow-md flex flex-col gap-4"
+                >
+                  <div className="space-y-1">
+                    <h3 className="text-chalk text-lg">{t.name}</h3>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Users className="size-3" />
+                        {t.mode}
+                      </span>
+                      <span>{countMap[id] ?? 0} teams</span>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/tournament/${id}/join`}
+                    className={cn(buttonVariants({ size: "sm" }), "w-full")}
+                  >
+                    Join
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; className: string }> = {
+    open: { label: "Open", className: "text-win" },
+    "in-progress": { label: "In Progress", className: "text-gold" },
+    complete: { label: "Complete", className: "text-muted-foreground" },
+  };
+  const { label, className } = map[status] ?? { label: status, className: "" };
+  return <span className={className}>{label}</span>;
+}

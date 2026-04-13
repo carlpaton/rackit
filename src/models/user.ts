@@ -13,6 +13,11 @@ const UserSchema = new Schema(
       type: String,
       required: true,
     },
+    displayName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },
