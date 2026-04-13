@@ -54,6 +54,18 @@ export default async function DashboardPage() {
     ])
   );
 
+  const playerCountAgg = await Team.aggregate([
+    { $match: { tournamentId: { $in: allIds } } },
+    { $project: { tournamentId: 1, n: { $size: "$userIds" } } },
+    { $group: { _id: "$tournamentId", total: { $sum: "$n" } } },
+  ]);
+  const playerMap: Record<string, number> = Object.fromEntries(
+    playerCountAgg.map((r: { _id: Types.ObjectId; total: number }) => [
+      r._id.toString(),
+      r.total,
+    ])
+  );
+
   const allTournaments = [...myTournaments, ...openTournaments];
   const organizerIds = [...new Set(allTournaments.map((t) => t.organizerUserId.toString()))];
   const organizers = await User.find({
@@ -120,6 +132,10 @@ export default async function DashboardPage() {
                       <span>{countMap[id] ?? 0} teams</span>
                       <StatusBadge status={t.status} />
                     </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{playerMap[id] ?? 0} players</span>
+                      <span>Created {formatDate(t.createdAt)}</span>
+                    </div>
                     {organizerName && (
                       <p className="text-xs text-muted-foreground">
                         Organised by {organizerName}
@@ -169,6 +185,10 @@ export default async function DashboardPage() {
                       </span>
                       <span>{countMap[id] ?? 0} teams</span>
                     </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{playerMap[id] ?? 0} players</span>
+                      <span>Created {formatDate(t.createdAt)}</span>
+                    </div>
                     {organizerName && (
                       <p className="text-xs text-muted-foreground">
                         Organised by {organizerName}
@@ -189,6 +209,13 @@ export default async function DashboardPage() {
       </section>
     </div>
   );
+}
+
+function formatDate(date: Date | string): string {
+  return new Date(date).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  });
 }
 
 function StatusBadge({ status }: { status: string }) {

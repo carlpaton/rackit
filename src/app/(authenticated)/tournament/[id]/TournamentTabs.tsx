@@ -52,9 +52,11 @@ export function TournamentTabs({
         ))}
       </div>
 
-      {active === "roster" && rosterContent}
-      {active === "groups" && groupsContent}
-      {active === "bracket" && bracketContent}
+      {active === "roster"
+        ? rosterContent
+        : active === "groups"
+          ? groupsContent
+          : bracketContent}
     </div>
   );
 }

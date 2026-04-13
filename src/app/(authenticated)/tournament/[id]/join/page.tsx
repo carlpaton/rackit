@@ -66,13 +66,16 @@ export default async function JoinTournamentPage({
     );
   }
 
-  const openTeams = await Team.find({
-    tournamentId: tId,
-    status: "open",
-  }).lean();
+  const [openTeams, fullTeams] = await Promise.all([
+    Team.find({ tournamentId: tId, status: "open" }).lean(),
+    Team.find({ tournamentId: tId, status: "full" }).lean(),
+  ]);
 
-  const partnerIds = openTeams.map((t) => t.userIds[0]);
-  const partners = await User.find({ _id: { $in: partnerIds } })
+  const allPlayerIds = [
+    ...openTeams.map((t) => t.userIds[0]),
+    ...fullTeams.flatMap((t) => t.userIds),
+  ];
+  const partners = await User.find({ _id: { $in: allPlayerIds } })
     .select("displayName email")
     .lean();
   const partnerMap = Object.fromEntries(
@@ -148,6 +151,28 @@ export default async function JoinTournamentPage({
           </form>
         </div>
       </section>
+
+      {fullTeams.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-lg text-chalk">Teams already formed</h2>
+          <div className="space-y-2">
+            {fullTeams.map((team) => {
+              const names = team.userIds
+                .map((uid) => partnerMap[uid.toString()] ?? "Unknown")
+                .join(" & ");
+              return (
+                <div
+                  key={team._id.toString()}
+                  className="bg-surface rounded-xl px-5 py-4 shadow-md flex items-center gap-3"
+                >
+                  <Users className="size-4 text-muted-foreground shrink-0" />
+                  <span className="text-chalk text-sm">{names}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -191,6 +191,22 @@
       "description": "Display the organizer's display name on every tournament card in the dashboard — both the My Tournaments and Open Tournaments sections. Fetch the organizer user's displayName (falling back to email prefix if not set) for each tournament and render it as a small metadata line on the card, e.g. 'Organised by Carl'. This gives players context on who is running a tournament before they join, and reminds organizers which of their tournaments are theirs. Acceptance criteria: both My Tournaments and Open Tournaments cards show the organizer name; the name is the organizer's displayName if set, otherwise their email prefix; the label reads something like 'Organised by [name]'; the existing Organizer badge (shown only to the organizer themselves) is kept alongside this new label.",
       "steps": [],
       "dependsOn": ["PRD-006"]
+    },
+    {
+      "id": "PRD-022",
+      "status": "done",
+      "heading": "Dashboard cards — player count and created date",
+      "description": "Add two metadata items to each tournament card on the dashboard (both My Tournaments and Open Tournaments sections). (1) Player count: total number of players currently in the tournament, counting singles players and both members of any doubles team — shown as '8 players'. For open half-teams (doubles status='open'), count only the single member present. (2) Created date: the tournament's createdAt date formatted as 'Created 2 Apr' (day and abbreviated month only, no year). Acceptance criteria: both metadata items appear on every card in both sections; player count reflects all enrolled players not just full teams; the date format is 'Created D Mon' with no leading zero on the day.",
+      "steps": [],
+      "dependsOn": ["PRD-021"]
+    },
+    {
+      "id": "PRD-023",
+      "status": "done",
+      "heading": "Join page — show full teams and redirect to tournament",
+      "description": "Two improvements to the tournament join flow. (1) The doubles join page (/tournament/[id]/join) currently lists only open half-teams (status='open'). It must also display already-formed full teams (status='full') so players can see who is already in the tournament — these are shown as read-only, without a join button. (2) After any successful join action (singles join, doubles join-half-team, doubles start-half-team), redirect the user to /tournament/[id] rather than /dashboard, so they land directly on the tournament detail page and can see their registration in context. Acceptance criteria: the join page shows a 'Full teams' section listing all status='full' teams by player name(s); open half-teams are still listed with their join button; the new full-teams section is read-only; after joining, the user is sent to /tournament/[id].",
+      "steps": [],
+      "dependsOn": ["PRD-008"]
     }
   ]
 }

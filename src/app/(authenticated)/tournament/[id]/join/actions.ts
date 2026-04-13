@@ -30,7 +30,7 @@ export async function joinSingles(
 ): Promise<void> {
   const { userId, tId } = await getContext(tournamentId);
   await Team.create({ tournamentId: tId, userIds: [userId], status: "full" });
-  redirect("/dashboard");
+  redirect(`/tournament/${tournamentId}`);
 }
 
 export async function joinHalfTeam(
@@ -45,7 +45,7 @@ export async function joinHalfTeam(
     { new: true }
   );
   if (!team) redirect(`/tournament/${tournamentId}/join`);
-  redirect("/dashboard");
+  redirect(`/tournament/${tournamentId}`);
 }
 
 export async function startHalfTeam(
@@ -54,5 +54,5 @@ export async function startHalfTeam(
 ): Promise<void> {
   const { userId, tId } = await getContext(tournamentId);
   await Team.create({ tournamentId: tId, userIds: [userId], status: "open" });
-  redirect("/dashboard");
+  redirect(`/tournament/${tournamentId}`);
 }

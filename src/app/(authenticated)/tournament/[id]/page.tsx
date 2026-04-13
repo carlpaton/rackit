@@ -141,7 +141,7 @@ export default async function TournamentPage({
 
   const groupsContent = (
     <section className="space-y-8">
-      {isOrganizer && allGroupMatchesPlayed && (
+      {isOrganizer && allGroupMatchesPlayed && knockoutMatches.length === 0 && (
         <form action={advanceAction}>
           <button type="submit" className={buttonVariants({ size: "default" })}>
             Advance to Knockout
