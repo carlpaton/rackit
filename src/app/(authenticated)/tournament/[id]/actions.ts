@@ -134,10 +134,15 @@ export async function recordResult(
   if (!tournament || tournament.status !== "in-progress") redirect("/dashboard");
 
   const isOrganizer = tournament.organizerUserId.toString() === userId.toString();
-  const isDelegated = match.delegatedToTeamIds.some(
-    (tid: Types.ObjectId) => tid.toString() === userId.toString()
-  );
-  if (!isOrganizer && !isDelegated) redirect(`/tournament/${match.tournamentId.toString()}`);
+  if (!isOrganizer) {
+    const userTeam = await Team.findOne({ tournamentId: match.tournamentId, userIds: userId }).lean();
+    const isDelegated = userTeam
+      ? match.delegatedToTeamIds.some(
+          (tid: Types.ObjectId) => tid.toString() === userTeam._id.toString()
+        )
+      : false;
+    if (!isDelegated) redirect(`/tournament/${match.tournamentId.toString()}`);
+  }
 
   match.winnerId = wId;
   await match.save();
@@ -154,7 +159,7 @@ async function advanceKnockout(
   completedMatchId: Types.ObjectId,
   winnerId: Types.ObjectId
 ) {
-  const allKnockout = await Match.find({ tournamentId, phase: "knockout" }).lean();
+  const allKnockout = await Match.find({ tournamentId, phase: "knockout" }).sort({ _id: 1 }).lean();
   const rounds = ["QF", "SF", "Final"];
   const completedMatch = allKnockout.find(
     (m) => m._id.toString() === completedMatchId.toString()
@@ -325,7 +330,7 @@ async function advanceByeWinners(
     tournamentId,
     phase: "knockout",
     round: completedRound,
-  }).lean();
+  }).sort({ _id: 1 }).lean();
 
   for (let i = 0; i < currentMatches.length; i += 2) {
     const a = currentMatches[i];
