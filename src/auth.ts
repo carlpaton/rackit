@@ -9,6 +9,14 @@ import { User } from "@/models/user";
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: MongoDBAdapter(clientPromise),
   session: { strategy: "jwt" },
+  pages: {
+    signIn: "/login",
+  },
+  callbacks: {
+    authorized({ auth: session }) {
+      return !!session?.user;
+    },
+  },
   providers: [
     Credentials({
       credentials: {

@@ -32,7 +32,7 @@
     },
     {
       "id": "PRD-003",
-      "status": "todo",
+      "status": "done",
       "heading": "Registration and login pages with session cookie",
       "description": "Build the registration and login UI flows that sit on top of the Credentials provider (PRD-002). Registration: email + password form, server action hashes the password with bcrypt, writes the user to the USERS collection, then calls NextAuth signIn to issue the session cookie, and redirects to /dashboard. Login: email + password form, delegates to NextAuth Credentials provider, redirects to /dashboard on success. Duplicate email on registration must show a generic error (e.g. 'Registration failed — please try again') without revealing the email already exists. The /dashboard route must be protected in proxy.ts so unauthenticated users are redirected to /login.",
       "steps": [
