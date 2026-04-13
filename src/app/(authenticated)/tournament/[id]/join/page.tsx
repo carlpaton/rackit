@@ -158,7 +158,7 @@ export default async function JoinTournamentPage({
           <div className="space-y-2">
             {fullTeams.map((team) => {
               const names = team.userIds
-                .map((uid) => partnerMap[uid.toString()] ?? "Unknown")
+                .map((uid: { toString(): string }) => partnerMap[uid.toString()] ?? "Unknown")
                 .join(" & ");
               return (
                 <div
