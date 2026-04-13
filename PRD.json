@@ -18,7 +18,7 @@
     },
     {
       "id": "PRD-002",
-      "status": "todo",
+      "status": "done",
       "heading": "Configure NextAuth.js v5 Credentials provider",
       "description": "Set up the authentication infrastructure using NextAuth.js v5's built-in Credentials provider. This establishes the session cookie that will later be shared with Google OAuth — no migration needed when Google is added. Includes: installing bcryptjs for password hashing, creating the Mongoose USERS model (fields: email with unique index, passwordHash, createdAt), wiring the Credentials provider into the NextAuth config, and confirming the MongoDB adapter is active. Acceptance criteria: a valid email/password pair produces a NextAuth session cookie; an invalid pair returns an auth error; passwords are never stored in plain text.",
       "steps": [
