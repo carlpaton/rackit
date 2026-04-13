@@ -4,6 +4,7 @@ import Link from "next/link";
 import { connectDB } from "@/lib/db";
 import { Tournament } from "@/models/tournament";
 import { Team } from "@/models/team";
+import { User } from "@/models/user";
 import { Types } from "mongoose";
 import { buttonVariants } from "@/components/ui/button";
 import { Users, Plus } from "lucide-react";
@@ -53,6 +54,20 @@ export default async function DashboardPage() {
     ])
   );
 
+  const allTournaments = [...myTournaments, ...openTournaments];
+  const organizerIds = [...new Set(allTournaments.map((t) => t.organizerUserId.toString()))];
+  const organizers = await User.find({
+    _id: { $in: organizerIds.map((id) => new Types.ObjectId(id)) },
+  })
+    .select("displayName email")
+    .lean();
+  const organizerMap: Record<string, string> = Object.fromEntries(
+    organizers.map((u) => [
+      u._id.toString(),
+      (u.displayName as string) || (u.email as string).split("@")[0],
+    ])
+  );
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-10">
       <div className="flex items-center justify-between">
@@ -80,6 +95,7 @@ export default async function DashboardPage() {
               const id = t._id.toString();
               const isOrganizer =
                 t.organizerUserId.toString() === session.user.id;
+              const organizerName = organizerMap[t.organizerUserId.toString()];
               return (
                 <div
                   key={id}
@@ -104,6 +120,11 @@ export default async function DashboardPage() {
                       <span>{countMap[id] ?? 0} teams</span>
                       <StatusBadge status={t.status} />
                     </div>
+                    {organizerName && (
+                      <p className="text-xs text-muted-foreground">
+                        Organised by {organizerName}
+                      </p>
+                    )}
                   </div>
                   <Link
                     href={`/tournament/${id}`}
@@ -133,6 +154,7 @@ export default async function DashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {openTournaments.map((t) => {
               const id = t._id.toString();
+              const organizerName = organizerMap[t.organizerUserId.toString()];
               return (
                 <div
                   key={id}
@@ -147,6 +169,11 @@ export default async function DashboardPage() {
                       </span>
                       <span>{countMap[id] ?? 0} teams</span>
                     </div>
+                    {organizerName && (
+                      <p className="text-xs text-muted-foreground">
+                        Organised by {organizerName}
+                      </p>
+                    )}
                   </div>
                   <Link
                     href={`/tournament/${id}/join`}

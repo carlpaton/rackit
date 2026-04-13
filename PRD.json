@@ -175,5 +175,22 @@
       "steps": [],
       "dependsOn": ["PRD-004"]
     }
+  ,
+    {
+      "id": "PRD-020",
+      "status": "done",
+      "heading": "Allow organizer to join and play their own tournament",
+      "description": "Remove the restriction that prevents a tournament organizer from joining their own tournament as a player. Currently the canJoin guard in the tournament detail page explicitly excludes the organizer (!isOrganizer). This should be removed so the organizer goes through the exact same join and leave flow as any other player — including the doubles half-team lobby. The organizer retains all management capabilities (recording results, delegating, starting the tournament) regardless of whether they have joined as a player. Acceptance criteria: the organizer sees the Join button on their own tournament when it is open and they have not yet joined; the organizer can join a singles tournament in one click; the organizer can join a doubles tournament via the half-team lobby (join an open slot or start a new half-team); the organizer can leave before the tournament starts; the Start Tournament button still appears (for the organizer) independently of whether they have joined as a player.",
+      "steps": [],
+      "dependsOn": ["PRD-011"]
+    },
+    {
+      "id": "PRD-021",
+      "status": "done",
+      "heading": "Show organizer name on dashboard tournament cards",
+      "description": "Display the organizer's display name on every tournament card in the dashboard — both the My Tournaments and Open Tournaments sections. Fetch the organizer user's displayName (falling back to email prefix if not set) for each tournament and render it as a small metadata line on the card, e.g. 'Organised by Carl'. This gives players context on who is running a tournament before they join, and reminds organizers which of their tournaments are theirs. Acceptance criteria: both My Tournaments and Open Tournaments cards show the organizer name; the name is the organizer's displayName if set, otherwise their email prefix; the label reads something like 'Organised by [name]'; the existing Organizer badge (shown only to the organizer themselves) is kept alongside this new label.",
+      "steps": [],
+      "dependsOn": ["PRD-006"]
+    }
   ]
 }

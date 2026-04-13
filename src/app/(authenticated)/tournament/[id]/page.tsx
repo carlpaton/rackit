@@ -54,7 +54,7 @@ export default async function TournamentPage({
   const isInTournament = !!myTeam;
   const canLeave = isInTournament && tournament.status === "open";
   const canStart = isOrganizer && tournament.status === "open" && fullTeams.length >= 2;
-  const canJoin = !isInTournament && !isOrganizer && tournament.status === "open";
+  const canJoin = !isInTournament && tournament.status === "open";
 
   function teamLabel(team: { userIds: Types.ObjectId[]; status: string }) {
     const names = team.userIds.map((uid) => userMap[uid.toString()] ?? "Unknown");
