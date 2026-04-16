@@ -50,9 +50,16 @@ export async function joinHalfTeam(
 
 export async function startHalfTeam(
   tournamentId: string,
-  _formData: FormData
+  formData: FormData
 ): Promise<void> {
   const { userId, tId } = await getContext(tournamentId);
-  await Team.create({ tournamentId: tId, userIds: [userId], status: "open" });
+  const rawName = formData.get("teamName");
+  const name = typeof rawName === "string" ? rawName.trim().slice(0, 50) : undefined;
+  await Team.create({
+    tournamentId: tId,
+    userIds: [userId],
+    status: "open",
+    ...(name ? { name } : {}),
+  });
   redirect(`/tournament/${tournamentId}`);
 }

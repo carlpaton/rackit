@@ -208,5 +208,14 @@
       "steps": [],
       "dependsOn": ["PRD-008"]
     }
+  ,
+    {
+      "id": "PRD-024",
+      "status": "done",
+      "heading": "Team names for doubles tournaments",
+      "description": "Allow doubles teams to optionally set a team name. Singles tournaments are unaffected. When a player starts a new half-team via the join flow, an optional 'Team name' text input (max 50 chars) is shown alongside the existing join UI — the player can leave it blank. Once a team is formed (status='full' or 'open'), either member can rename the team inline on the tournament detail page roster tab, via a small edit affordance next to the team name — this is only available while the tournament status is 'open'; once 'in-progress' or 'complete' the name is locked and the edit control is hidden. The organizer cannot rename other teams. Display: wherever a team is shown (roster tab, standings table, bracket, join page open/full team lists), if the team has a name, display it as '{TeamName} (Player1 & Player2)' — the team name followed by the player names in parentheses. If no name is set, fall back to the existing display logic (just 'Player1 & Player2') unchanged. For open half-teams with a name, display as '{TeamName} (PlayerName, looking for partner)'. Model change: add an optional name field (string, max 50 chars) to the Team Mongoose model. Acceptance criteria: optional name input appears when starting a new half-team; name is saved on team creation; either team member sees an inline edit control on the roster tab while the tournament is open; editing saves the new name and refreshes the display; when a name is set it displays as '{Name} (players)' everywhere a team is shown; no name set = existing fallback display; singles tournaments and non-team-member users see no edit controls.",
+      "steps": [],
+      "dependsOn": ["PRD-008", "PRD-011"]
+    }
   ]
 }

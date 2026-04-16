@@ -67,8 +67,8 @@ export default async function JoinTournamentPage({
   }
 
   const [openTeams, fullTeams] = await Promise.all([
-    Team.find({ tournamentId: tId, status: "open" }).lean(),
-    Team.find({ tournamentId: tId, status: "full" }).lean(),
+    Team.find({ tournamentId: tId, status: "open" }).select("userIds status name").lean(),
+    Team.find({ tournamentId: tId, status: "full" }).select("userIds status name").lean(),
   ]);
 
   const allPlayerIds = [
@@ -109,7 +109,9 @@ export default async function JoinTournamentPage({
                 >
                   <span className="flex items-center gap-2 text-chalk text-sm">
                     <Users className="size-4 text-muted-foreground" />
-                    {partnerName} is looking for a partner
+                    {team.name
+                      ? `${team.name} (${partnerName}, looking for partner)`
+                      : `${partnerName} is looking for a partner`}
                   </span>
                   <form action={joinAction}>
                     <button
@@ -134,20 +136,31 @@ export default async function JoinTournamentPage({
           <p className="text-muted-foreground text-sm">
             Create a half-team and wait for a partner to join you.
           </p>
-          <form action={startAction} className="flex gap-3">
-            <button
-              type="submit"
-              className={cn(buttonVariants({ size: "default" }), "flex-1")}
-            >
-              <UserPlus className="size-4" />
-              Start a Half-Team
-            </button>
-            <Link
-              href="/dashboard"
-              className="flex-1 flex items-center justify-center rounded-lg border border-white/10 text-sm text-muted-foreground hover:text-chalk hover:border-white/20 transition-colors"
-            >
-              Cancel
-            </Link>
+          <form action={startAction} className="space-y-3">
+            <div>
+              <input
+                type="text"
+                name="teamName"
+                maxLength={50}
+                placeholder="Team name (optional)"
+                className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-chalk placeholder:text-muted-foreground focus:outline-none focus:border-white/30"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                className={cn(buttonVariants({ size: "default" }), "flex-1")}
+              >
+                <UserPlus className="size-4" />
+                Start a Half-Team
+              </button>
+              <Link
+                href="/dashboard"
+                className="flex-1 flex items-center justify-center rounded-lg border border-white/10 text-sm text-muted-foreground hover:text-chalk hover:border-white/20 transition-colors"
+              >
+                Cancel
+              </Link>
+            </div>
           </form>
         </div>
       </section>
@@ -160,13 +173,14 @@ export default async function JoinTournamentPage({
               const names = team.userIds
                 .map((uid: { toString(): string }) => partnerMap[uid.toString()] ?? "Unknown")
                 .join(" & ");
+              const display = team.name ? `${team.name} (${names})` : names;
               return (
                 <div
                   key={team._id.toString()}
                   className="bg-surface rounded-xl px-5 py-4 shadow-md flex items-center gap-3"
                 >
                   <Users className="size-4 text-muted-foreground shrink-0" />
-                  <span className="text-chalk text-sm">{names}</span>
+                  <span className="text-chalk text-sm">{display}</span>
                 </div>
               );
             })}

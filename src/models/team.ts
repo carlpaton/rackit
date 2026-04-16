@@ -19,6 +19,11 @@ const TeamSchema = new Schema(
       enum: ["open", "full"],
       required: true,
     },
+    name: {
+      type: String,
+      maxlength: 50,
+      default: undefined,
+    },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },

@@ -350,6 +350,32 @@ async function advanceByeWinners(
   }
 }
 
+export async function renameTeam(
+  teamId: string,
+  tournamentId: string,
+  formData: FormData
+): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+
+  await connectDB();
+  const userId = new Types.ObjectId(session.user.id);
+  const tId = new Types.ObjectId(tournamentId);
+
+  const tournament = await Tournament.findById(tId).lean();
+  if (!tournament || tournament.status !== "open") redirect(`/tournament/${tournamentId}`);
+
+  const team = await Team.findOne({ _id: new Types.ObjectId(teamId), tournamentId: tId, userIds: userId });
+  if (!team) redirect(`/tournament/${tournamentId}`);
+
+  const rawName = formData.get("teamName");
+  const name = typeof rawName === "string" ? rawName.trim().slice(0, 50) : "";
+  team.name = name || undefined;
+  await team.save();
+
+  redirect(`/tournament/${tournamentId}`);
+}
+
 export async function delegateMatch(
   matchId: string,
   teamIds: string[],

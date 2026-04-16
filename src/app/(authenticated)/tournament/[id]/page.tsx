@@ -11,8 +11,9 @@ import { Types } from "mongoose";
 import { buttonVariants } from "@/components/ui/button";
 import { Users, ArrowLeft, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { leaveTournament, startTournament, recordResult, advanceToKnockout, delegateMatch } from "./actions";
+import { leaveTournament, startTournament, recordResult, advanceToKnockout, delegateMatch, renameTeam } from "./actions";
 import { TournamentTabs } from "./TournamentTabs";
+import { RenameTeamForm } from "./RenameTeamForm";
 
 export default async function TournamentPage({
   params,
@@ -56,10 +57,15 @@ export default async function TournamentPage({
   const canStart = isOrganizer && tournament.status === "open" && fullTeams.length >= 2;
   const canJoin = !isInTournament && tournament.status === "open";
 
-  function teamLabel(team: { userIds: Types.ObjectId[]; status: string }) {
+  function teamLabel(team: { userIds: Types.ObjectId[]; status: string; name?: string }) {
     const names = team.userIds.map((uid) => userMap[uid.toString()] ?? "Unknown");
-    if (team.status === "open") return `${names[0]} (looking for partner)`;
-    return names.join(" & ");
+    if (team.status === "open") {
+      return team.name
+        ? `${team.name} (${names[0]}, looking for partner)`
+        : `${names[0]} (looking for partner)`;
+    }
+    const playerPart = names.join(" & ");
+    return team.name ? `${team.name} (${playerPart})` : playerPart;
   }
 
   const teamNameMap: Record<string, string> = Object.fromEntries(
@@ -122,18 +128,42 @@ export default async function TournamentPage({
         <p className="text-muted-foreground text-sm">No teams yet.</p>
       ) : (
         <div className="space-y-2">
-          {fullTeams.map((team) => (
-            <div key={team._id.toString()} className="bg-surface rounded-xl px-5 py-3 text-chalk text-sm flex items-center gap-2">
-              <Users className="size-4 text-muted-foreground shrink-0" />
-              {teamLabel(team)}
-            </div>
-          ))}
-          {openTeams.map((team) => (
-            <div key={team._id.toString()} className="bg-surface rounded-xl px-5 py-3 text-muted-foreground text-sm flex items-center gap-2 italic">
-              <Users className="size-4 shrink-0" />
-              {teamLabel(team)}
-            </div>
-          ))}
+          {fullTeams.map((team) => {
+            const isMyTeam = myTeam?._id.toString() === team._id.toString();
+            const canRename = isMyTeam && tournament.status === "open" && tournament.mode === "doubles";
+            const label = teamLabel(team);
+            return (
+              <div key={team._id.toString()} className="bg-surface rounded-xl px-5 py-3 text-chalk text-sm flex items-center gap-2">
+                <Users className="size-4 text-muted-foreground shrink-0" />
+                {canRename ? (
+                  <RenameTeamForm
+                    teamId={team._id.toString()}
+                    tournamentId={id}
+                    currentName={team.name ?? ""}
+                    displayLabel={label}
+                  />
+                ) : label}
+              </div>
+            );
+          })}
+          {openTeams.map((team) => {
+            const isMyTeam = myTeam?._id.toString() === team._id.toString();
+            const canRename = isMyTeam && tournament.status === "open" && tournament.mode === "doubles";
+            const label = teamLabel(team);
+            return (
+              <div key={team._id.toString()} className="bg-surface rounded-xl px-5 py-3 text-muted-foreground text-sm flex items-center gap-2 italic">
+                <Users className="size-4 shrink-0" />
+                {canRename ? (
+                  <RenameTeamForm
+                    teamId={team._id.toString()}
+                    tournamentId={id}
+                    currentName={team.name ?? ""}
+                    displayLabel={label}
+                  />
+                ) : label}
+              </div>
+            );
+          })}
         </div>
       )}
     </section>
