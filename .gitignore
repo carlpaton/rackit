@@ -28,3 +28,7 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# TypeScript / Next.js build artifacts
+tsconfig.tsbuildinfo
+next-env.d.ts
