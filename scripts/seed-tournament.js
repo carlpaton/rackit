@@ -46,21 +46,24 @@ async function main() {
     .split("\n")
     .map((l) => l.trim());
 
+  // Each group: { emails: string[], name?: string }
   const groups = [];
-  let current = [];
+  let current = { emails: [], name: undefined };
   for (const line of lines) {
     if (line === "") {
-      if (current.length > 0) {
+      if (current.emails.length > 0) {
         groups.push(current);
-        current = [];
+        current = { emails: [], name: undefined };
       }
     } else if (line.includes("@")) {
-      current.push(line.toLowerCase());
+      current.emails.push(line.toLowerCase());
+    } else {
+      current.name = line;
     }
   }
-  if (current.length > 0) groups.push(current);
+  if (current.emails.length > 0) groups.push(current);
 
-  const allEmails = [...new Set(groups.flat())];
+  const allEmails = [...new Set(groups.flatMap((g) => g.emails))];
   console.log(`Parsed ${groups.length} group(s), ${allEmails.length} unique email(s)`);
 
   const client = new MongoClient(process.env.MONGODB_URI);
@@ -118,31 +121,38 @@ async function main() {
 
   if (mode === "doubles") {
     for (const group of groups) {
-      const memberIds = group.map((e) => emailToId[e]).filter(Boolean);
+      const memberIds = group.emails.map((e) => emailToId[e]).filter(Boolean);
       if (memberIds.length === 0) {
-        console.log(`  Skipped [${group.join(", ")}] — no matching users`);
+        console.log(`  Skipped [${group.emails.join(", ")}] — no matching users`);
         continue;
       }
-      const names = group
+      const playerNames = group.emails
         .filter((e) => emailToId[e])
         .map((e) => e.split("@")[0]);
+      const teamName = group.name || undefined;
 
       if (memberIds.length === 1) {
         await teamsCol.insertOne({
           tournamentId,
           userIds: memberIds,
+          name: teamName,
           status: "open",
           createdAt: now,
         });
-        console.log(`  Created open team: ${names[0]} (partner not found)`);
+        const label = teamName ? `"${teamName}" — ${playerNames[0]}` : playerNames[0];
+        console.log(`  Created open team: ${label} (partner not found)`);
       } else {
         await teamsCol.insertOne({
           tournamentId,
           userIds: memberIds.slice(0, 2),
+          name: teamName,
           status: "full",
           createdAt: now,
         });
-        console.log(`  Created team: ${names.slice(0, 2).join(" & ")}`);
+        const label = teamName
+          ? `"${teamName}" — ${playerNames.slice(0, 2).join(" & ")}`
+          : playerNames.slice(0, 2).join(" & ");
+        console.log(`  Created team: ${label}`);
       }
       teamsCreated++;
     }

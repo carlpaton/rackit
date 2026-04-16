@@ -26,14 +26,16 @@ node seed-tournament.js --mode doubles
 
 ## How teams are built
 
-Users in `data.txt` are separated into groups by blank lines. In **doubles** mode each group becomes one team:
+Users in `data.txt` are separated into groups by blank lines. In **doubles** mode each group becomes one team. An optional team name can be added as a third line in the group:
 
 ```
 Aka@gmail.com       ← Team 1
 Jen@gmail.com       ↗
+The Breakers        ← optional team name
 
 Fiona@gmail.com     ← Team 2
 Kieran@gmail.com    ↗
+Cue Masters         ← optional team name
 ```
 
 In **singles** mode each unique email becomes its own team, blank lines are ignored.
