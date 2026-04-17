@@ -15,26 +15,32 @@ You are building UI for **Rackit**, a pool tournament app. Follow these design s
 
 ## Typography
 
-Fonts are loaded via `next/font/google` in `src/app/layout.tsx`:
+Fonts are loaded via `next/font/google` in `src/app/layout.tsx` and registered in `globals.css` as:
 
-- **Oswald** — headings, tournament names, scores, bracket labels (`font-oswald`)
-- **Inter** — body text, labels, form fields (`font-inter`, default)
+- `--font-heading` → Oswald — use class `font-heading`
+- `--font-sans` → Inter — use class `font-sans` (applied by default to `body`)
 
-Always use `font-oswald` on `h1`, `h2`, tournament titles, and score displays. Use `font-inter` (or no class) everywhere else.
+`globals.css` globally applies `font-heading` to `h1`, `h2`, `h3`, `h4` — no extra class needed on those elements.
+
+Use `font-heading` explicitly only on non-heading elements that need Oswald (e.g. score badges, step numbers, bracket labels).
+
+**Never use `font-oswald` or `font-inter`** — those CSS variables exist but are not registered as Tailwind utilities. Only `font-heading` and `font-sans` work.
 
 ## Colour Palette
 
-Use these Tailwind custom colours (defined in `tailwind.config`). Never use raw hex values in components.
+All tokens are defined in `src/app/globals.css` under `@theme inline`. Config is **not** in `tailwind.config.js` — this project uses Tailwind v4. Never use raw hex values.
 
-| Token | Usage | Hex |
-|---|---|---|
-| `bg-felt` | Page and section backgrounds | `#1a3d2b` |
-| `bg-surface` | Cards, panels, modals | `#234d38` |
-| `text-chalk` | Primary text | `#f0ede4` |
-| `accent-gold` | CTAs, highlights, active states | `#c9a84c` |
-| `result-win` | Win indicators, positive states | `#4caf72` |
-| `result-loss` | Loss backgrounds, destructive button fills | `#8b1a1a` |
-| `loss-text` | Loss text/icons on dark green surfaces (readable red) | `#e05555` |
+The Tailwind utility prefix matches the CSS variable name exactly (e.g. `--color-gold` → `text-gold`, `bg-gold`, `border-gold`):
+
+| CSS variable | Tailwind utilities | Usage | Hex |
+|---|---|---|---|
+| `--color-felt` | `bg-felt`, `text-felt` | Page/section backgrounds | `#1a3d2b` |
+| `--color-surface` | `bg-surface`, `text-surface` | Cards, panels, modals | `#234d38` |
+| `--color-chalk` | `text-chalk` | Primary text | `#f0ede4` |
+| `--color-gold` | `text-gold`, `bg-gold`, `border-gold` | CTAs, highlights, active states | `#c9a84c` |
+| `--color-win` | `text-win`, `bg-win` | Win indicators, positive states | `#4caf72` |
+| `--color-loss` | `text-loss`, `bg-loss` | Loss backgrounds, destructive fills | `#8b1a1a` |
+| `--color-loss-text` | `text-loss-text` | Loss text/icons on dark green (readable red) | `#e05555` |
 
 Dark theme only — there is no light/dark toggle.
 

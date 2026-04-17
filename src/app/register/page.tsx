@@ -22,7 +22,15 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center">
+    <div className="flex flex-1 flex-col">
+      <header className="bg-surface border-b border-white/10">
+        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center">
+          <Link href="/" className="font-heading text-xl text-chalk hover:text-gold transition-colors">
+            Rackit
+          </Link>
+        </div>
+      </header>
+      <div className="flex flex-1 items-center justify-center">
       <div className="w-full max-w-sm space-y-6 px-4">
         <h1 className="text-2xl font-semibold text-center">Create account</h1>
 
@@ -92,6 +100,7 @@ export default function RegisterPage() {
             Sign in
           </Link>
         </p>
+      </div>
       </div>
     </div>
   );

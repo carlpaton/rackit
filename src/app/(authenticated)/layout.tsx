@@ -29,6 +29,12 @@ export default async function AuthenticatedLayout({
             Rackit
           </Link>
           <div className="flex items-center gap-4">
+            <Link
+              href="/how-it-works"
+              className="text-sm text-chalk/60 hover:text-chalk transition-colors"
+            >
+              How it works
+            </Link>
             <span className="text-sm text-chalk">{displayName}</span>
             <form action={logoutAction}>
               <button
