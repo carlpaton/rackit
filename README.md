@@ -10,7 +10,7 @@ Live: https://rackit.vercel.app
 
 ### 1. Create a Supabase project
 
-Go to [supabase.com](https://supabase.com), create a new project, then grab two connection strings from **Project Settings → Database → Connection string**:
+Go to [supabase.com](https://supabase.com), create a new project, then grab two connection strings from **Connect → ORM Third Party → Prisma**:
 
 - **Transaction pooler** (port 6543) → `DATABASE_URL`
 - **Direct connection** (port 5432) → `DIRECT_URL`
