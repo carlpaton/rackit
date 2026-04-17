@@ -464,7 +464,7 @@ function computeStandings(
       stats[aKey].won++;
       stats[aKey].points++;
       if (stats[bKey]) stats[bKey].lost++;
-    } else {
+    } else if (wKey === bKey) {
       stats[bKey].won++;
       stats[bKey].points++;
       if (stats[aKey]) stats[aKey].lost++;

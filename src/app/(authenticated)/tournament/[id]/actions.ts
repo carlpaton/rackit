@@ -149,6 +149,11 @@ export async function recordResult(
     if (!isDelegated) redirect(`/tournament/${match.tournamentId}`);
   }
 
+  if (match.winnerId !== null) redirect(`/tournament/${match.tournamentId}`);
+
+  const validTeamIds = [match.teamAId, ...(match.teamBId ? [match.teamBId] : [])];
+  if (!validTeamIds.includes(winnerId)) redirect(`/tournament/${match.tournamentId}`);
+
   await prisma.match.update({
     where: { id: matchId },
     data: { winnerId },
@@ -291,7 +296,7 @@ function computeGroupStandings(
       stats[aKey].won++;
       stats[aKey].results[bKey] = 1;
       stats[bKey].results[aKey] = 0;
-    } else {
+    } else if (wKey === bKey) {
       stats[bKey].points++;
       stats[bKey].won++;
       stats[bKey].results[aKey] = 1;
