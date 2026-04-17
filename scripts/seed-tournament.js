@@ -10,10 +10,11 @@
  *   node scripts/seed-tournament.js --mode singles
  *   node scripts/seed-tournament.js --organizer carl@gmail.com
  *
- * Requires .env.local to be present with MONGODB_URI set.
+ * Requires .env.local to be present with DATABASE_URL set.
  */
 
-const { MongoClient } = require("mongodb");
+const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
@@ -35,8 +36,8 @@ if (!["singles", "doubles"].includes(mode)) {
 }
 
 async function main() {
-  if (!process.env.MONGODB_URI) {
-    console.error("Error: MONGODB_URI not set in .env.local");
+  if (!process.env.DATABASE_URL) {
+    console.error("Error: DATABASE_URL not set in .env.local");
     process.exit(1);
   }
 
@@ -66,114 +67,112 @@ async function main() {
   const allEmails = [...new Set(groups.flatMap((g) => g.emails))];
   console.log(`Parsed ${groups.length} group(s), ${allEmails.length} unique email(s)`);
 
-  const client = new MongoClient(process.env.MONGODB_URI);
-  await client.connect();
-  const db = client.db();
-  const usersCol = db.collection("users");
-  const tournamentsCol = db.collection("tournaments");
-  const teamsCol = db.collection("teams");
+  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+  const prisma = new PrismaClient({ adapter });
 
-  // Resolve emails → user IDs
-  const userDocs = await usersCol.find({ email: { $in: allEmails } }).toArray();
-  const emailToId = Object.fromEntries(userDocs.map((u) => [u.email, u._id]));
+  try {
+    // Resolve emails → user IDs
+    const userDocs = await prisma.user.findMany({
+      where: { email: { in: allEmails } },
+      select: { id: true, email: true },
+    });
+    const emailToId = Object.fromEntries(userDocs.map((u) => [u.email, u.id]));
 
-  const missing = allEmails.filter((e) => !emailToId[e]);
-  if (missing.length > 0) {
-    console.warn("Warning: users not found in DB (skipping):", missing.join(", "));
-  }
-
-  // Resolve organizer
-  let organizerId;
-  if (organizerEmail) {
-    organizerId = emailToId[organizerEmail.toLowerCase()];
-    if (!organizerId) {
-      console.error("Error: organizer email not found:", organizerEmail);
-      await client.close();
-      process.exit(1);
+    const missing = allEmails.filter((e) => !emailToId[e]);
+    if (missing.length > 0) {
+      console.warn("Warning: users not found in DB (skipping):", missing.join(", "));
     }
-    console.log("Organizer:", organizerEmail);
-  } else {
-    const first = userDocs[0];
-    if (!first) {
-      console.error("Error: no users found in DB");
-      await client.close();
-      process.exit(1);
-    }
-    organizerId = first._id;
-    console.log("Organizer (defaulting to first user):", first.email);
-  }
 
-  // Create tournament
-  const now = new Date();
-  const { insertedId: tournamentId } = await tournamentsCol.insertOne({
-    name: tournamentName,
-    mode,
-    status: "open",
-    path: null,
-    organizerUserId: organizerId,
-    winnerTeamId: null,
-    createdAt: now,
-  });
-  console.log(`\nCreated tournament: "${tournamentName}" (${mode}) — id: ${tournamentId}`);
-
-  // Create teams
-  let teamsCreated = 0;
-
-  if (mode === "doubles") {
-    for (const group of groups) {
-      const memberIds = group.emails.map((e) => emailToId[e]).filter(Boolean);
-      if (memberIds.length === 0) {
-        console.log(`  Skipped [${group.emails.join(", ")}] — no matching users`);
-        continue;
+    // Resolve organizer
+    let organizerId;
+    if (organizerEmail) {
+      organizerId = emailToId[organizerEmail.toLowerCase()];
+      if (!organizerId) {
+        console.error("Error: organizer email not found:", organizerEmail);
+        process.exit(1);
       }
-      const playerNames = group.emails
-        .filter((e) => emailToId[e])
-        .map((e) => e.split("@")[0]);
-      const teamName = group.name || undefined;
+      console.log("Organizer:", organizerEmail);
+    } else {
+      const first = userDocs[0];
+      if (!first) {
+        console.error("Error: no users found in DB");
+        process.exit(1);
+      }
+      organizerId = first.id;
+      console.log("Organizer (defaulting to first user):", first.email);
+    }
 
-      if (memberIds.length === 1) {
-        await teamsCol.insertOne({
-          tournamentId,
-          userIds: memberIds,
-          name: teamName,
-          status: "open",
-          createdAt: now,
+    // Create tournament
+    const tournament = await prisma.tournament.create({
+      data: {
+        name: tournamentName,
+        mode,
+        organizerUserId: organizerId,
+      },
+    });
+    console.log(`\nCreated tournament: "${tournamentName}" (${mode}) — id: ${tournament.id}`);
+
+    // Create teams
+    let teamsCreated = 0;
+
+    if (mode === "doubles") {
+      for (const group of groups) {
+        const memberIds = group.emails.map((e) => emailToId[e]).filter(Boolean);
+        if (memberIds.length === 0) {
+          console.log(`  Skipped [${group.emails.join(", ")}] — no matching users`);
+          continue;
+        }
+        const playerNames = group.emails
+          .filter((e) => emailToId[e])
+          .map((e) => e.split("@")[0]);
+
+        const isFullTeam = memberIds.length >= 2;
+        const teamMembers = isFullTeam ? memberIds.slice(0, 2) : memberIds;
+
+        const team = await prisma.team.create({
+          data: {
+            tournamentId: tournament.id,
+            name: group.name ?? null,
+            status: isFullTeam ? "full" : "open",
+            users: {
+              create: teamMembers.map((userId) => ({ userId })),
+            },
+          },
         });
-        const label = teamName ? `"${teamName}" — ${playerNames[0]}` : playerNames[0];
-        console.log(`  Created open team: ${label} (partner not found)`);
-      } else {
-        await teamsCol.insertOne({
-          tournamentId,
-          userIds: memberIds.slice(0, 2),
-          name: teamName,
-          status: "full",
-          createdAt: now,
-        });
-        const label = teamName
-          ? `"${teamName}" — ${playerNames.slice(0, 2).join(" & ")}`
+
+        const label = group.name
+          ? `"${group.name}" — ${playerNames.slice(0, 2).join(" & ")}`
           : playerNames.slice(0, 2).join(" & ");
-        console.log(`  Created team: ${label}`);
+        console.log(
+          isFullTeam
+            ? `  Created team: ${label}`
+            : `  Created open team: ${playerNames[0]} (partner not found)`
+        );
+        teamsCreated++;
       }
-      teamsCreated++;
+    } else {
+      // Singles — one team per unique user
+      for (const email of allEmails) {
+        const userId = emailToId[email];
+        if (!userId) continue;
+        await prisma.team.create({
+          data: {
+            tournamentId: tournament.id,
+            status: "full",
+            users: {
+              create: [{ userId }],
+            },
+          },
+        });
+        console.log(`  Created team: ${email.split("@")[0]}`);
+        teamsCreated++;
+      }
     }
-  } else {
-    // Singles — one team per unique user
-    for (const email of allEmails) {
-      const userId = emailToId[email];
-      if (!userId) continue;
-      await teamsCol.insertOne({
-        tournamentId,
-        userIds: [userId],
-        status: "full",
-        createdAt: now,
-      });
-      console.log(`  Created team: ${email.split("@")[0]}`);
-      teamsCreated++;
-    }
-  }
 
-  console.log(`\nDone — ${teamsCreated} teams created in "${tournamentName}"`);
-  await client.close();
+    console.log(`\nDone — ${teamsCreated} teams created in "${tournamentName}"`);
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 main().catch((err) => {
