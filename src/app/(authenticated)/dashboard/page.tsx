@@ -1,11 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { connectDB } from "@/lib/db";
-import { Tournament } from "@/models/tournament";
-import { Team } from "@/models/team";
-import { User } from "@/models/user";
-import { Types } from "mongoose";
+import prisma from "@/lib/prisma";
 import { buttonVariants } from "@/components/ui/button";
 import { Users, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,69 +10,70 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  await connectDB();
-  const userId = new Types.ObjectId(session.user.id);
+  const userId = session.user.id;
 
-  const myTeams = await Team.find({ userIds: userId }).lean();
-  const myJoinedTournamentIds = myTeams.map((t) => t.tournamentId);
+  // Tournaments where the user is a team member
+  const myTeams = await prisma.userTeam.findMany({
+    where: { userId },
+    select: { team: { select: { tournamentId: true } } },
+  });
+  const myJoinedTournamentIds = myTeams.map((ut) => ut.team.tournamentId);
 
-  const myTournaments = await Tournament.find({
-    $or: [
-      { organizerUserId: userId },
-      { _id: { $in: myJoinedTournamentIds } },
-    ],
-  })
-    .sort({ createdAt: -1 })
-    .lean();
+  const myTournaments = await prisma.tournament.findMany({
+    where: {
+      OR: [
+        { organizerUserId: userId },
+        { id: { in: myJoinedTournamentIds } },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
-  const myTournamentObjectIds = myTournaments.map((t) => t._id);
+  const myTournamentIds = myTournaments.map((t) => t.id);
 
-  const openTournaments = await Tournament.find({
-    status: "open",
-    _id: { $nin: myTournamentObjectIds },
-  })
-    .sort({ createdAt: -1 })
-    .lean();
+  const openTournaments = await prisma.tournament.findMany({
+    where: {
+      status: "open",
+      id: { notIn: myTournamentIds },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
-  const allIds = [
-    ...myTournamentObjectIds,
-    ...openTournaments.map((t) => t._id),
-  ];
+  const allIds = [...myTournamentIds, ...openTournaments.map((t) => t.id)];
 
-  const teamCountAgg = await Team.aggregate([
-    { $match: { tournamentId: { $in: allIds }, status: "full" } },
-    { $group: { _id: "$tournamentId", count: { $sum: 1 } } },
-  ]);
-  const countMap: Record<string, number> = Object.fromEntries(
-    teamCountAgg.map((r: { _id: Types.ObjectId; count: number }) => [
-      r._id.toString(),
-      r.count,
-    ])
-  );
+  // Count full teams and total players per tournament
+  const teams = await prisma.team.findMany({
+    where: { tournamentId: { in: allIds } },
+    select: {
+      tournamentId: true,
+      status: true,
+      _count: { select: { users: true } },
+    },
+  });
 
-  const playerCountAgg = await Team.aggregate([
-    { $match: { tournamentId: { $in: allIds } } },
-    { $project: { tournamentId: 1, n: { $size: "$userIds" } } },
-    { $group: { _id: "$tournamentId", total: { $sum: "$n" } } },
-  ]);
-  const playerMap: Record<string, number> = Object.fromEntries(
-    playerCountAgg.map((r: { _id: Types.ObjectId; total: number }) => [
-      r._id.toString(),
-      r.total,
-    ])
-  );
+  const countMap: Record<string, number> = {};
+  const playerMap: Record<string, number> = {};
+  for (const team of teams) {
+    if (team.status === "full") {
+      countMap[team.tournamentId] = (countMap[team.tournamentId] ?? 0) + 1;
+    }
+    playerMap[team.tournamentId] =
+      (playerMap[team.tournamentId] ?? 0) + team._count.users;
+  }
 
+  // Organizer display names
   const allTournaments = [...myTournaments, ...openTournaments];
-  const organizerIds = [...new Set(allTournaments.map((t) => t.organizerUserId.toString()))];
-  const organizers = await User.find({
-    _id: { $in: organizerIds.map((id) => new Types.ObjectId(id)) },
-  })
-    .select("displayName email")
-    .lean();
+  const organizerIds = [
+    ...new Set(allTournaments.map((t) => t.organizerUserId)),
+  ];
+  const organizers = await prisma.user.findMany({
+    where: { id: { in: organizerIds } },
+    select: { id: true, displayName: true, email: true },
+  });
   const organizerMap: Record<string, string> = Object.fromEntries(
     organizers.map((u) => [
-      u._id.toString(),
-      (u.displayName as string) || (u.email as string).split("@")[0],
+      u.id,
+      u.displayName || u.email.split("@")[0],
     ])
   );
 
@@ -104,13 +101,11 @@ export default async function DashboardPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {myTournaments.map((t) => {
-              const id = t._id.toString();
-              const isOrganizer =
-                t.organizerUserId.toString() === session.user.id;
-              const organizerName = organizerMap[t.organizerUserId.toString()];
+              const isOrganizer = t.organizerUserId === userId;
+              const organizerName = organizerMap[t.organizerUserId];
               return (
                 <div
-                  key={id}
+                  key={t.id}
                   className="bg-surface rounded-xl p-6 shadow-md flex flex-col gap-4"
                 >
                   <div className="space-y-1">
@@ -129,11 +124,11 @@ export default async function DashboardPage() {
                         <Users className="size-3" />
                         {t.mode}
                       </span>
-                      <span>{countMap[id] ?? 0} teams</span>
+                      <span>{countMap[t.id] ?? 0} teams</span>
                       <StatusBadge status={t.status} />
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{playerMap[id] ?? 0} players</span>
+                      <span>{playerMap[t.id] ?? 0} players</span>
                       <span>Created {formatDate(t.createdAt)}</span>
                     </div>
                     {organizerName && (
@@ -143,7 +138,7 @@ export default async function DashboardPage() {
                     )}
                   </div>
                   <Link
-                    href={`/tournament/${id}`}
+                    href={`/tournament/${t.id}`}
                     className={cn(
                       buttonVariants({ variant: "outline", size: "sm" }),
                       "w-full"
@@ -169,11 +164,10 @@ export default async function DashboardPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {openTournaments.map((t) => {
-              const id = t._id.toString();
-              const organizerName = organizerMap[t.organizerUserId.toString()];
+              const organizerName = organizerMap[t.organizerUserId];
               return (
                 <div
-                  key={id}
+                  key={t.id}
                   className="bg-surface rounded-xl p-6 shadow-md flex flex-col gap-4"
                 >
                   <div className="space-y-1">
@@ -183,10 +177,10 @@ export default async function DashboardPage() {
                         <Users className="size-3" />
                         {t.mode}
                       </span>
-                      <span>{countMap[id] ?? 0} teams</span>
+                      <span>{countMap[t.id] ?? 0} teams</span>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{playerMap[id] ?? 0} players</span>
+                      <span>{playerMap[t.id] ?? 0} players</span>
                       <span>Created {formatDate(t.createdAt)}</span>
                     </div>
                     {organizerName && (
@@ -196,7 +190,7 @@ export default async function DashboardPage() {
                     )}
                   </div>
                   <Link
-                    href={`/tournament/${id}/join`}
+                    href={`/tournament/${t.id}/join`}
                     className={cn(buttonVariants({ size: "sm" }), "w-full")}
                   >
                     Join
@@ -221,7 +215,7 @@ function formatDate(date: Date | string): string {
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
     open: { label: "Open", className: "text-win" },
-    "in-progress": { label: "In Progress", className: "text-gold" },
+    in_progress: { label: "In Progress", className: "text-gold" },
     complete: { label: "Complete", className: "text-muted-foreground" },
   };
   const { label, className } = map[status] ?? { label: status, className: "" };
