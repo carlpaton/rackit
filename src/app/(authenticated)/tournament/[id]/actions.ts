@@ -306,7 +306,7 @@ function computeGroupStandings(
   return Object.values(stats).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     const headToHead =
-      (a.results[b.teamId] ?? 0) - (b.results[a.teamId] ?? 0);
+      (b.results[a.teamId] ?? 0) - (a.results[b.teamId] ?? 0);
     return headToHead;
   });
 }
