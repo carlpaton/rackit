@@ -1,11 +1,7 @@
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { connectDB } from "@/lib/db";
-import { Tournament } from "@/models/tournament";
-import { Team } from "@/models/team";
-import { User } from "@/models/user";
-import { Types } from "mongoose";
+import prisma from "@/lib/prisma";
 import { buttonVariants } from "@/components/ui/button";
 import { Users, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,18 +16,17 @@ export default async function JoinTournamentPage({
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  await connectDB();
-  const tId = new Types.ObjectId(id);
-  const userId = new Types.ObjectId(session.user.id);
+  const userId = session.user.id;
 
-  const tournament = await Tournament.findById(tId).lean();
+  const tournament = await prisma.tournament.findUnique({
+    where: { id },
+  });
   if (!tournament) notFound();
   if (tournament.status !== "open") redirect("/dashboard");
 
-  const existingTeam = await Team.findOne({
-    tournamentId: tId,
-    userIds: userId,
-  }).lean();
+  const existingTeam = await prisma.userTeam.findFirst({
+    where: { userId, team: { tournamentId: id } },
+  });
   if (existingTeam) redirect("/dashboard");
 
   if (tournament.mode === "singles") {
@@ -67,22 +62,26 @@ export default async function JoinTournamentPage({
   }
 
   const [openTeams, fullTeams] = await Promise.all([
-    Team.find({ tournamentId: tId, status: "open" }).select("userIds status name").lean(),
-    Team.find({ tournamentId: tId, status: "full" }).select("userIds status name").lean(),
+    prisma.team.findMany({
+      where: { tournamentId: id, status: "open" },
+      include: { users: { select: { userId: true } } },
+    }),
+    prisma.team.findMany({
+      where: { tournamentId: id, status: "full" },
+      include: { users: { select: { userId: true } } },
+    }),
   ]);
 
   const allPlayerIds = [
-    ...openTeams.map((t) => t.userIds[0]),
-    ...fullTeams.flatMap((t) => t.userIds),
+    ...openTeams.map((t) => t.users[0]?.userId).filter(Boolean) as string[],
+    ...fullTeams.flatMap((t) => t.users.map((u) => u.userId)),
   ];
-  const partners = await User.find({ _id: { $in: allPlayerIds } })
-    .select("displayName email")
-    .lean();
+  const partners = await prisma.user.findMany({
+    where: { id: { in: allPlayerIds } },
+    select: { id: true, displayName: true, email: true },
+  });
   const partnerMap = Object.fromEntries(
-    partners.map((u) => [
-      u._id.toString(),
-      u.displayName || (u.email as string).split("@")[0],
-    ])
+    partners.map((u) => [u.id, u.displayName || u.email.split("@")[0]])
   );
 
   const startAction = startHalfTeam.bind(null, id);
@@ -99,12 +98,12 @@ export default async function JoinTournamentPage({
           <h2 className="text-lg text-chalk">Join an open slot</h2>
           <div className="space-y-2">
             {openTeams.map((team) => {
-              const partnerId = team.userIds[0]?.toString() ?? "";
+              const partnerId = team.users[0]?.userId ?? "";
               const partnerName = partnerMap[partnerId] ?? "Unknown";
-              const joinAction = joinHalfTeam.bind(null, id, team._id.toString());
+              const joinAction = joinHalfTeam.bind(null, id, team.id);
               return (
                 <div
-                  key={team._id.toString()}
+                  key={team.id}
                   className="bg-surface rounded-xl px-5 py-4 shadow-md flex items-center justify-between gap-4"
                 >
                   <span className="flex items-center gap-2 text-chalk text-sm">
@@ -170,13 +169,13 @@ export default async function JoinTournamentPage({
           <h2 className="text-lg text-chalk">Teams already formed</h2>
           <div className="space-y-2">
             {fullTeams.map((team) => {
-              const names = team.userIds
-                .map((uid: { toString(): string }) => partnerMap[uid.toString()] ?? "Unknown")
+              const names = team.users
+                .map((u) => partnerMap[u.userId] ?? "Unknown")
                 .join(" & ");
               const display = team.name ? `${team.name} (${names})` : names;
               return (
                 <div
-                  key={team._id.toString()}
+                  key={team.id}
                   className="bg-surface rounded-xl px-5 py-4 shadow-md flex items-center gap-3"
                 >
                   <Users className="size-4 text-muted-foreground shrink-0" />

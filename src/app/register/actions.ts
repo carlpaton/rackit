@@ -3,8 +3,7 @@
 import bcrypt from "bcryptjs";
 import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
-import { connectDB } from "@/lib/db";
-import { User } from "@/models/user";
+import prisma from "@/lib/prisma";
 
 export type RegisterState = { error?: string } | null;
 
@@ -24,13 +23,11 @@ export async function register(
     return { error: "Password must be at least 8 characters." };
   }
 
-  await connectDB();
-
   try {
     const passwordHash = await bcrypt.hash(password, 12);
-    await User.create({ email, passwordHash, displayName });
+    await prisma.user.create({ data: { email, passwordHash, displayName } });
   } catch {
-    // Duplicate key error (code 11000) or any other DB error —
+    // Unique constraint violation or any other DB error —
     // return a generic message that doesn't reveal whether the email exists
     return { error: "Registration failed — please try again." };
   }

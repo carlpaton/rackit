@@ -2,12 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { connectDB } from "@/lib/db";
-import { Tournament } from "@/models/tournament";
-import { Team } from "@/models/team";
-import { Group } from "@/models/group";
-import { Match } from "@/models/match";
-import { Types } from "mongoose";
+import prisma from "@/lib/prisma";
 
 export async function leaveTournament(
   tournamentId: string,
@@ -16,24 +11,31 @@ export async function leaveTournament(
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  await connectDB();
-  const userId = new Types.ObjectId(session.user.id);
-  const tId = new Types.ObjectId(tournamentId);
+  const userId = session.user.id;
 
-  const tournament = await Tournament.findById(tId).lean();
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+  });
   if (!tournament || tournament.status !== "open") redirect("/dashboard");
 
-  const team = await Team.findOne({ tournamentId: tId, userIds: userId });
-  if (!team) redirect("/dashboard");
+  const userTeam = await prisma.userTeam.findFirst({
+    where: { userId, team: { tournamentId } },
+    include: { team: { include: { users: true } } },
+  });
+  if (!userTeam) redirect("/dashboard");
 
-  if (team.status === "full" && team.userIds.length === 2) {
-    team.userIds = team.userIds.filter(
-      (uid: Types.ObjectId) => uid.toString() !== userId.toString()
-    );
-    team.status = "open";
-    await team.save();
+  const team = userTeam.team;
+
+  if (team.status === "full" && team.users.length === 2) {
+    await prisma.$transaction([
+      prisma.userTeam.delete({
+        where: { userId_teamId: { userId, teamId: team.id } },
+      }),
+      prisma.team.update({ where: { id: team.id }, data: { status: "open" } }),
+    ]);
   } else {
-    await Team.deleteOne({ _id: team._id });
+    // Deletes the team; UserTeam rows cascade-delete
+    await prisma.team.delete({ where: { id: team.id } });
   }
 
   redirect("/dashboard");
@@ -46,71 +48,72 @@ export async function startTournament(
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  await connectDB();
-  const userId = new Types.ObjectId(session.user.id);
-  const tId = new Types.ObjectId(tournamentId);
+  const userId = session.user.id;
 
-  const tournament = await Tournament.findById(tId).lean();
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+  });
   if (!tournament) redirect("/dashboard");
-  if (tournament.organizerUserId.toString() !== userId.toString()) redirect("/dashboard");
+  if (tournament.organizerUserId !== userId) redirect("/dashboard");
   if (tournament.status !== "open") redirect("/dashboard");
 
-  const fullTeams = await Team.find({ tournamentId: tId, status: "full" }).lean();
+  const fullTeams = await prisma.team.findMany({
+    where: { tournamentId, status: "full" },
+  });
   if (fullTeams.length < 2) redirect(`/tournament/${tournamentId}`);
 
-  const path = fullTeams.length <= 4 ? "direct-knockout" : "group-stage";
+  const path = fullTeams.length <= 4 ? "direct_knockout" : "group_stage";
 
-  await Tournament.updateOne({ _id: tId }, { $set: { status: "in-progress", path } });
+  await prisma.tournament.update({
+    where: { id: tournamentId },
+    data: { status: "in_progress", path },
+  });
 
-  if (path === "group-stage") {
-    await generateGroupStage(tId, fullTeams);
+  if (path === "group_stage") {
+    await generateGroupStage(tournamentId, fullTeams.map((t) => t.id));
   } else {
-    await generateKnockoutBracket(tId, fullTeams.map((t) => t._id));
+    await generateKnockoutBracket(tournamentId, fullTeams.map((t) => t.id));
   }
 
   redirect(`/tournament/${tournamentId}`);
 }
 
-async function generateGroupStage(
-  tournamentId: Types.ObjectId,
-  fullTeams: { _id: Types.ObjectId }[]
-) {
-  const teamIds = shuffle(fullTeams.map((t) => t._id));
+async function generateGroupStage(tournamentId: string, fullTeamIds: string[]) {
+  const teamIds = shuffle(fullTeamIds);
   const n = teamIds.length;
   const numGroups = Math.max(2, Math.ceil(n / 4));
-
   const groupLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const matchDocs = [];
 
   for (let g = 0; g < numGroups; g++) {
     const start = Math.floor((g * n) / numGroups);
     const end = Math.floor(((g + 1) * n) / numGroups);
     const groupTeamIds = teamIds.slice(start, end);
 
-    const group = await Group.create({
-      tournamentId,
-      name: `Group ${groupLetters[g]}`,
-      teamIds: groupTeamIds,
+    const group = await prisma.group.create({
+      data: {
+        tournamentId,
+        name: `Group ${groupLetters[g]}`,
+        teams: {
+          create: groupTeamIds.map((teamId) => ({ teamId })),
+        },
+      },
     });
 
+    const matchData = [];
     for (let i = 0; i < groupTeamIds.length; i++) {
       for (let j = i + 1; j < groupTeamIds.length; j++) {
-        matchDocs.push({
+        matchData.push({
           tournamentId,
-          groupId: group._id,
+          groupId: group.id,
           teamAId: groupTeamIds[i],
           teamBId: groupTeamIds[j],
-          winnerId: null,
-          phase: "group",
-          round: null,
-          delegatedToTeamIds: [],
+          phase: "group" as const,
         });
       }
     }
-  }
-
-  if (matchDocs.length > 0) {
-    await Match.insertMany(matchDocs);
+    if (matchData.length > 0) {
+      await prisma.match.createMany({ data: matchData });
+    }
   }
 }
 
@@ -122,89 +125,101 @@ export async function recordResult(
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  await connectDB();
-  const userId = new Types.ObjectId(session.user.id);
-  const mId = new Types.ObjectId(matchId);
-  const wId = new Types.ObjectId(winnerId);
+  const userId = session.user.id;
 
-  const match = await Match.findById(mId);
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: { delegations: true },
+  });
   if (!match) redirect("/dashboard");
 
-  const tournament = await Tournament.findById(match.tournamentId).lean();
-  if (!tournament || tournament.status !== "in-progress") redirect("/dashboard");
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: match.tournamentId },
+  });
+  if (!tournament || tournament.status !== "in_progress") redirect("/dashboard");
 
-  const isOrganizer = tournament.organizerUserId.toString() === userId.toString();
+  const isOrganizer = tournament.organizerUserId === userId;
   if (!isOrganizer) {
-    const userTeam = await Team.findOne({ tournamentId: match.tournamentId, userIds: userId }).lean();
+    const userTeam = await prisma.userTeam.findFirst({
+      where: { userId, team: { tournamentId: match.tournamentId } },
+    });
     const isDelegated = userTeam
-      ? match.delegatedToTeamIds.some(
-          (tid: Types.ObjectId) => tid.toString() === userTeam._id.toString()
-        )
+      ? match.delegations.some((d) => d.teamId === userTeam.teamId)
       : false;
-    if (!isDelegated) redirect(`/tournament/${match.tournamentId.toString()}`);
+    if (!isDelegated) redirect(`/tournament/${match.tournamentId}`);
   }
 
-  match.winnerId = wId;
-  await match.save();
+  await prisma.match.update({
+    where: { id: matchId },
+    data: { winnerId },
+  });
 
   if (match.phase === "knockout") {
-    await advanceKnockout(match.tournamentId, match._id, wId);
+    await advanceKnockout(match.tournamentId, matchId, winnerId);
   }
 
-  redirect(`/tournament/${match.tournamentId.toString()}`);
+  redirect(`/tournament/${match.tournamentId}`);
 }
 
 async function advanceKnockout(
-  tournamentId: Types.ObjectId,
-  completedMatchId: Types.ObjectId,
-  winnerId: Types.ObjectId
+  tournamentId: string,
+  completedMatchId: string,
+  winnerId: string
 ) {
-  const allKnockout = await Match.find({ tournamentId, phase: "knockout" }).sort({ _id: 1 }).lean();
+  const allKnockout = await prisma.match.findMany({
+    where: { tournamentId, phase: "knockout" },
+    orderBy: [{ bracketOrder: "asc" }, { createdAt: "asc" }],
+  });
+
   const rounds = ["QF", "SF", "Final"];
-  const completedMatch = allKnockout.find(
-    (m) => m._id.toString() === completedMatchId.toString()
-  );
+  const completedMatch = allKnockout.find((m) => m.id === completedMatchId);
   if (!completedMatch) return;
 
   const currentRoundIdx = rounds.indexOf(completedMatch.round ?? "");
   if (currentRoundIdx === -1 || currentRoundIdx === rounds.length - 1) {
     if (completedMatch.round === "Final") {
-      await Tournament.updateOne(
-        { _id: tournamentId },
-        { $set: { status: "complete", winnerTeamId: winnerId } }
-      );
+      await prisma.tournament.update({
+        where: { id: tournamentId },
+        data: { status: "complete", winnerTeamId: winnerId },
+      });
     }
     return;
   }
 
-  const nextRound = rounds[currentRoundIdx + 1];
-  const currentRoundMatches = allKnockout.filter((m) => m.round === completedMatch.round);
-
+  const nextRound = rounds[currentRoundIdx + 1] as "QF" | "SF" | "Final";
+  const currentRoundMatches = allKnockout.filter(
+    (m) => m.round === completedMatch.round
+  );
   const matchIndex = currentRoundMatches.findIndex(
-    (m) => m._id.toString() === completedMatchId.toString()
+    (m) => m.id === completedMatchId
   );
   const pairIndex = Math.floor(matchIndex / 2);
-
   const pair = currentRoundMatches.slice(pairIndex * 2, pairIndex * 2 + 2);
-  const pairCompleted = pair.filter(
-    (m) => m.winnerId !== null || m._id.toString() === completedMatchId.toString()
-  );
 
-  const getWinner = (m: { _id: Types.ObjectId; winnerId: Types.ObjectId | null }) =>
-    m._id.toString() === completedMatchId.toString() ? winnerId : m.winnerId;
+  const getWinner = (m: { id: string; winnerId: string | null }) =>
+    m.id === completedMatchId ? winnerId : m.winnerId;
+
+  const pairCompleted = pair.filter(
+    (m) => m.winnerId !== null || m.id === completedMatchId
+  );
 
   if (pairCompleted.length === 2) {
     const winnerA = getWinner(pair[0]);
     const winnerB = pair[1] ? getWinner(pair[1]) : null;
-    await Match.create({
-      tournamentId,
-      groupId: null,
-      teamAId: winnerA,
-      teamBId: winnerB,
-      winnerId: null,
-      phase: "knockout",
-      round: nextRound,
-      delegatedToTeamIds: [],
+    const nextBracketOrder =
+      (currentRoundMatches
+        .filter((_, i) => i < pairIndex * 2)
+        .filter((_, i) => i % 2 === 0).length) +
+      (allKnockout.filter((m) => m.round === nextRound).length);
+    await prisma.match.create({
+      data: {
+        tournamentId,
+        teamAId: winnerA!,
+        teamBId: winnerB,
+        phase: "knockout",
+        round: nextRound,
+        bracketOrder: nextBracketOrder,
+      },
     });
   }
 }
@@ -216,47 +231,61 @@ export async function advanceToKnockout(
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  await connectDB();
-  const userId = new Types.ObjectId(session.user.id);
-  const tId = new Types.ObjectId(tournamentId);
+  const userId = session.user.id;
 
-  const tournament = await Tournament.findById(tId).lean();
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+  });
   if (!tournament) redirect("/dashboard");
-  if (tournament.organizerUserId.toString() !== userId.toString()) redirect("/dashboard");
-  if (tournament.status !== "in-progress" || tournament.path !== "group-stage") redirect(`/tournament/${tournamentId}`);
+  if (tournament.organizerUserId !== userId) redirect("/dashboard");
+  if (tournament.status !== "in_progress" || tournament.path !== "group_stage")
+    redirect(`/tournament/${tournamentId}`);
 
-  const groupMatches = await Match.find({ tournamentId: tId, phase: "group" }).lean();
+  const groupMatches = await prisma.match.findMany({
+    where: { tournamentId, phase: "group" },
+  });
   const allPlayed = groupMatches.every((m) => m.winnerId !== null);
   if (!allPlayed) redirect(`/tournament/${tournamentId}`);
 
-  const groups = await Group.find({ tournamentId: tId }).lean();
-  const qualifiers: Types.ObjectId[] = [];
+  const groups = await prisma.group.findMany({
+    where: { tournamentId },
+    include: { teams: true },
+  });
+  const qualifiers: string[] = [];
 
   for (const group of groups) {
-    const gMatches = groupMatches.filter(
-      (m) => m.groupId?.toString() === group._id.toString()
+    const gMatches = groupMatches.filter((m) => m.groupId === group.id);
+    const standings = computeGroupStandings(
+      group.teams.map((gt) => gt.teamId),
+      gMatches
     );
-    const standings = computeGroupStandings(group.teamIds, gMatches);
     qualifiers.push(...standings.slice(0, 2).map((s) => s.teamId));
   }
 
-  await generateKnockoutBracket(tId, qualifiers);
+  await generateKnockoutBracket(tournamentId, qualifiers);
   redirect(`/tournament/${tournamentId}`);
 }
 
 function computeGroupStandings(
-  teamIds: Types.ObjectId[],
-  matches: { teamAId: Types.ObjectId; teamBId: Types.ObjectId; winnerId: Types.ObjectId | null }[]
+  teamIds: string[],
+  matches: {
+    teamAId: string;
+    teamBId: string | null;
+    winnerId: string | null;
+  }[]
 ) {
-  const stats: Record<string, { teamId: Types.ObjectId; points: number; won: number; results: Record<string, number> }> = {};
+  const stats: Record<
+    string,
+    { teamId: string; points: number; won: number; results: Record<string, number> }
+  > = {};
   for (const tid of teamIds) {
-    stats[tid.toString()] = { teamId: tid, points: 0, won: 0, results: {} };
+    stats[tid] = { teamId: tid, points: 0, won: 0, results: {} };
   }
   for (const m of matches) {
-    if (!m.winnerId) continue;
-    const aKey = m.teamAId.toString();
-    const bKey = m.teamBId.toString();
-    const wKey = m.winnerId.toString();
+    if (!m.winnerId || !m.teamBId) continue;
+    const aKey = m.teamAId;
+    const bKey = m.teamBId;
+    const wKey = m.winnerId;
     if (wKey === aKey) {
       stats[aKey].points++;
       stats[aKey].won++;
@@ -271,82 +300,86 @@ function computeGroupStandings(
   }
   return Object.values(stats).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
-    const headToHead = (a.results[b.teamId.toString()] ?? 0) - (b.results[a.teamId.toString()] ?? 0);
+    const headToHead =
+      (a.results[b.teamId] ?? 0) - (b.results[a.teamId] ?? 0);
     return headToHead;
   });
 }
 
 export async function generateKnockoutBracket(
-  tournamentId: Types.ObjectId,
-  teamIds: Types.ObjectId[]
+  tournamentId: string,
+  teamIds: string[]
 ) {
   const shuffled = shuffle([...teamIds]);
   const n = shuffled.length;
   const bracketSize = nextPowerOf2(n);
   const byeCount = bracketSize - n;
 
-  const slots: (Types.ObjectId | null)[] = [...shuffled, ...Array(byeCount).fill(null)];
+  const slots: (string | null)[] = [
+    ...shuffled,
+    ...Array(byeCount).fill(null),
+  ];
 
-  const round = bracketSize === 2 ? "Final" : bracketSize === 4 ? "SF" : "QF";
-  const matchDocs = [];
+  const round: "QF" | "SF" | "Final" =
+    bracketSize === 2 ? "Final" : bracketSize === 4 ? "SF" : "QF";
 
+  const matchData = [];
   for (let i = 0; i < slots.length; i += 2) {
     const teamA = slots[i]!;
     const teamB = slots[i + 1];
-    matchDocs.push({
+    matchData.push({
       tournamentId,
-      groupId: null,
       teamAId: teamA,
       teamBId: teamB,
       winnerId: teamB === null ? teamA : null,
-      phase: "knockout",
+      phase: "knockout" as const,
       round,
-      delegatedToTeamIds: [],
+      bracketOrder: i / 2,
     });
   }
 
-  await Match.insertMany(matchDocs);
+  await prisma.match.createMany({ data: matchData });
 
-  const byeWinners = matchDocs
+  const byeWinnerIds = matchData
     .filter((m) => m.teamBId === null)
     .map((m) => m.teamAId);
 
-  if (byeWinners.length > 0 && round !== "Final") {
-    await advanceByeWinners(tournamentId, round, byeWinners);
+  if (byeWinnerIds.length > 0 && round !== "Final") {
+    await advanceByeWinners(tournamentId, round);
   }
 }
 
 async function advanceByeWinners(
-  tournamentId: Types.ObjectId,
-  completedRound: string,
-  _byeWinners: Types.ObjectId[]
+  tournamentId: string,
+  completedRound: "QF" | "SF" | "Final"
 ) {
-  const rounds = ["QF", "SF", "Final"];
+  const rounds = ["QF", "SF", "Final"] as const;
   const currentIdx = rounds.indexOf(completedRound);
   if (currentIdx === -1 || currentIdx >= rounds.length - 1) return;
 
   const nextRound = rounds[currentIdx + 1];
-  const currentMatches = await Match.find({
-    tournamentId,
-    phase: "knockout",
-    round: completedRound,
-  }).sort({ _id: 1 }).lean();
+  const currentMatches = await prisma.match.findMany({
+    where: { tournamentId, phase: "knockout", round: completedRound },
+    orderBy: [{ bracketOrder: "asc" }, { createdAt: "asc" }],
+  });
 
+  const newMatches = [];
   for (let i = 0; i < currentMatches.length; i += 2) {
     const a = currentMatches[i];
     const b = currentMatches[i + 1];
     if (a?.winnerId && b?.winnerId) {
-      await Match.create({
+      newMatches.push({
         tournamentId,
-        groupId: null,
         teamAId: a.winnerId,
         teamBId: b.winnerId,
-        winnerId: null,
-        phase: "knockout",
+        phase: "knockout" as const,
         round: nextRound,
-        delegatedToTeamIds: [],
+        bracketOrder: i / 2,
       });
     }
+  }
+  if (newMatches.length > 0) {
+    await prisma.match.createMany({ data: newMatches });
   }
 }
 
@@ -358,20 +391,27 @@ export async function renameTeam(
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  await connectDB();
-  const userId = new Types.ObjectId(session.user.id);
-  const tId = new Types.ObjectId(tournamentId);
+  const userId = session.user.id;
 
-  const tournament = await Tournament.findById(tId).lean();
-  if (!tournament || tournament.status !== "open") redirect(`/tournament/${tournamentId}`);
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+  });
+  if (!tournament || tournament.status !== "open")
+    redirect(`/tournament/${tournamentId}`);
 
-  const team = await Team.findOne({ _id: new Types.ObjectId(teamId), tournamentId: tId, userIds: userId });
-  if (!team) redirect(`/tournament/${tournamentId}`);
+  const userTeam = await prisma.userTeam.findFirst({
+    where: { userId, teamId, team: { tournamentId } },
+  });
+  if (!userTeam) redirect(`/tournament/${tournamentId}`);
 
   const rawName = formData.get("teamName");
-  const name = typeof rawName === "string" ? rawName.trim().slice(0, 50) : "";
-  team.name = name || undefined;
-  await team.save();
+  const name =
+    typeof rawName === "string" ? rawName.trim().slice(0, 50) : null;
+
+  await prisma.team.update({
+    where: { id: teamId },
+    data: { name: name || null },
+  });
 
   redirect(`/tournament/${tournamentId}`);
 }
@@ -384,26 +424,31 @@ export async function delegateMatch(
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  await connectDB();
-  const userId = new Types.ObjectId(session.user.id);
-  const mId = new Types.ObjectId(matchId);
+  const userId = session.user.id;
 
-  const match = await Match.findById(mId);
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: { delegations: true },
+  });
   if (!match) redirect("/dashboard");
 
-  const tournament = await Tournament.findById(match.tournamentId).lean();
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: match.tournamentId },
+  });
   if (!tournament) redirect("/dashboard");
-  if (tournament.organizerUserId.toString() !== userId.toString()) redirect("/dashboard");
+  if (tournament.organizerUserId !== userId) redirect("/dashboard");
 
-  const alreadyDelegated = match.delegatedToTeamIds.length > 0;
+  const alreadyDelegated = match.delegations.length > 0;
+
   if (alreadyDelegated) {
-    match.delegatedToTeamIds = [];
+    await prisma.matchDelegation.deleteMany({ where: { matchId } });
   } else {
-    match.delegatedToTeamIds = teamIds.map((id) => new Types.ObjectId(id));
+    await prisma.matchDelegation.createMany({
+      data: teamIds.map((teamId) => ({ matchId, teamId })),
+    });
   }
-  await match.save();
 
-  redirect(`/tournament/${match.tournamentId.toString()}`);
+  redirect(`/tournament/${match.tournamentId}`);
 }
 
 function shuffle<T>(arr: T[]): T[] {

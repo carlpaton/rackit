@@ -217,5 +217,22 @@
       "steps": [],
       "dependsOn": ["PRD-008", "PRD-011"]
     }
+  ,
+    {
+      "id": "PRD-025",
+      "status": "done",
+      "heading": "Set up Prisma ORM with Supabase PostgreSQL",
+      "description": "Replace the MongoDB infrastructure with Prisma ORM pointed at a Supabase PostgreSQL database. This covers everything except the actual query rewrites (PRD-026). Steps: install Prisma and configure it with the Supabase DATABASE_URL; define the Prisma schema with models equivalent to the 5 existing Mongoose models (User, Tournament, Team, Match, Group) plus the NextAuth required tables (Account, Session, VerificationToken); swap @auth/mongodb-adapter for @auth/prisma-adapter in auth.ts; remove src/lib/db.ts and src/lib/mongodb.ts; update environment variables (remove MONGODB_URI, add DATABASE_URL from Supabase and DIRECT_URL for migrations); configure Vercel build command to run 'prisma generate && prisma migrate deploy && next build' so migrations run automatically on every deploy; update CLAUDE.md to reflect the new stack (Prisma ORM instead of Mongoose, Supabase PostgreSQL instead of MongoDB, new env vars, how to create and run migrations locally with prisma migrate dev). Acceptance criteria: prisma migrate dev runs locally and creates all tables in Supabase; NextAuth session and account tables are created by the Prisma schema; Vercel build runs migrations before building; CLAUDE.md documents the Prisma workflow for future feature development; MONGODB_URI is removed from .env.example and replaced with DATABASE_URL and DIRECT_URL with explanatory comments.",
+      "steps": [],
+      "dependsOn": []
+    },
+    {
+      "id": "PRD-026",
+      "status": "done",
+      "heading": "Replace Mongoose queries with Prisma across codebase",
+      "description": "Remove all Mongoose models and replace every database query in server actions and API routes with Prisma Client calls. All 5 Mongoose model files (src/models/user.ts, tournament.ts, team.ts, match.ts, group.ts) are deleted. Every server action that currently calls Model.create(), Model.find(), Model.findById(), Model.findOneAndUpdate(), Model.deleteOne(), etc. is rewritten using the Prisma Client (prisma.user.create(), prisma.tournament.findMany(), etc.). The Prisma Client instance should be a singleton following the recommended pattern for Next.js (src/lib/prisma.ts — reuse global instance in dev to avoid hot-reload exhaustion). Acceptance criteria: no Mongoose imports remain anywhere in the codebase; all existing features work identically (tournament CRUD, join/leave, group stage, knockout bracket, result recording, delegation); prisma studio can inspect all app data; no runtime errors from missing or mismatched field names between the old Mongoose schema and the new Prisma schema.",
+      "steps": [],
+      "dependsOn": ["PRD-025"]
+    }
   ]
 }

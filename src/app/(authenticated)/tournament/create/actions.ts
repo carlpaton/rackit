@@ -2,9 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { connectDB } from "@/lib/db";
-import { Tournament } from "@/models/tournament";
-import { Types } from "mongoose";
+import prisma from "@/lib/prisma";
 
 export type CreateTournamentState = { error?: string } | null;
 
@@ -23,13 +21,12 @@ export async function createTournament(
     return { error: "Please select a mode." };
   }
 
-  await connectDB();
-
-  await Tournament.create({
-    name,
-    mode,
-    status: "open",
-    organizerUserId: new Types.ObjectId(session.user.id),
+  await prisma.tournament.create({
+    data: {
+      name,
+      mode,
+      organizerUserId: session.user.id,
+    },
   });
 
   redirect(`/dashboard`);

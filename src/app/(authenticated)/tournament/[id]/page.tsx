@@ -1,17 +1,18 @@
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { connectDB } from "@/lib/db";
-import { Tournament } from "@/models/tournament";
-import { Team } from "@/models/team";
-import { User } from "@/models/user";
-import { Group } from "@/models/group";
-import { Match } from "@/models/match";
-import { Types } from "mongoose";
+import prisma from "@/lib/prisma";
 import { buttonVariants } from "@/components/ui/button";
 import { Users, ArrowLeft, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { leaveTournament, startTournament, recordResult, advanceToKnockout, delegateMatch, renameTeam } from "./actions";
+import {
+  leaveTournament,
+  startTournament,
+  recordResult,
+  advanceToKnockout,
+  delegateMatch,
+  renameTeam,
+} from "./actions";
 import { TournamentTabs } from "./TournamentTabs";
 import { RenameTeamForm } from "./RenameTeamForm";
 
@@ -24,41 +25,42 @@ export default async function TournamentPage({
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  await connectDB();
-  const tId = new Types.ObjectId(id);
-  const userId = new Types.ObjectId(session.user.id);
+  const userId = session.user.id;
 
-  const tournament = await Tournament.findById(tId).lean();
+  const tournament = await prisma.tournament.findUnique({
+    where: { id },
+  });
   if (!tournament) notFound();
 
-  const isOrganizer = tournament.organizerUserId.toString() === session.user.id;
+  const isOrganizer = tournament.organizerUserId === userId;
 
-  const teams = await Team.find({ tournamentId: tId }).lean();
+  const teams = await prisma.team.findMany({
+    where: { tournamentId: id },
+    include: { users: { select: { userId: true } } },
+  });
   const fullTeams = teams.filter((t) => t.status === "full");
   const openTeams = teams.filter((t) => t.status === "open");
 
-  const allUserIds = teams.flatMap((t) => t.userIds);
-  const users = await User.find({ _id: { $in: allUserIds } })
-    .select("displayName email")
-    .lean();
+  const allUserIds = teams.flatMap((t) => t.users.map((u) => u.userId));
+  const users = await prisma.user.findMany({
+    where: { id: { in: allUserIds } },
+    select: { id: true, displayName: true, email: true },
+  });
   const userMap: Record<string, string> = Object.fromEntries(
-    users.map((u) => [
-      u._id.toString(),
-      (u.displayName as string) || (u.email as string).split("@")[0],
-    ])
+    users.map((u) => [u.id, u.displayName || u.email.split("@")[0]])
   );
 
   const myTeam = teams.find((t) =>
-    t.userIds.some((uid: Types.ObjectId) => uid.toString() === session.user.id)
+    t.users.some((u) => u.userId === userId)
   );
-  const myTeamId = myTeam?._id.toString();
+  const myTeamId = myTeam?.id;
   const isInTournament = !!myTeam;
   const canLeave = isInTournament && tournament.status === "open";
   const canStart = isOrganizer && tournament.status === "open" && fullTeams.length >= 2;
   const canJoin = !isInTournament && tournament.status === "open";
 
-  function teamLabel(team: { userIds: Types.ObjectId[]; status: string; name?: string }) {
-    const names = team.userIds.map((uid) => userMap[uid.toString()] ?? "Unknown");
+  function teamLabel(team: { users: { userId: string }[]; status: string; name?: string | null }) {
+    const names = team.users.map((u) => userMap[u.userId] ?? "Unknown");
     if (team.status === "open") {
       return team.name
         ? `${team.name} (${names[0]}, looking for partner)`
@@ -69,51 +71,53 @@ export default async function TournamentPage({
   }
 
   const teamNameMap: Record<string, string> = Object.fromEntries(
-    teams.map((t) => [t._id.toString(), teamLabel(t)])
+    teams.map((t) => [t.id, teamLabel(t)])
   );
 
   const leaveAction = leaveTournament.bind(null, id);
   const startAction = startTournament.bind(null, id);
   const advanceAction = advanceToKnockout.bind(null, id);
 
-  const groups = await Group.find({ tournamentId: tId }).lean();
-  const matches = await Match.find({ tournamentId: tId }).lean();
+  const groups = await prisma.group.findMany({
+    where: { tournamentId: id },
+    include: { teams: { select: { teamId: true } } },
+  });
+  const matches = await prisma.match.findMany({
+    where: { tournamentId: id },
+    include: { delegations: { select: { teamId: true } } },
+    orderBy: [{ bracketOrder: "asc" }, { createdAt: "asc" }],
+  });
 
   const groupMatches = matches.filter((m) => m.phase === "group");
   const knockoutMatches = matches.filter((m) => m.phase === "knockout");
 
   const allGroupMatchesPlayed =
     groupMatches.length > 0 && groupMatches.every((m) => m.winnerId !== null);
-  const bracketLocked = tournament.path === "group-stage" && !allGroupMatchesPlayed;
-  const showGroups = tournament.status !== "open" && tournament.path === "group-stage";
+  const bracketLocked = tournament.path === "group_stage" && !allGroupMatchesPlayed;
+  const showGroups = tournament.status !== "open" && tournament.path === "group_stage";
 
   const defaultTab =
     tournament.status === "open"
       ? "roster"
       : tournament.status === "complete"
       ? "bracket"
-      : tournament.path === "group-stage"
+      : tournament.path === "group_stage"
       ? "groups"
       : "bracket";
 
   const winnerTeam = tournament.winnerTeamId
-    ? teams.find((t) => t._id.toString() === tournament.winnerTeamId?.toString())
+    ? teams.find((t) => t.id === tournament.winnerTeamId)
     : null;
 
-  function canRecordMatch(match: { delegatedToTeamIds: Types.ObjectId[] }) {
+  function canRecordMatch(match: { delegations: { teamId: string }[] }) {
     if (isOrganizer) return true;
     if (!myTeamId) return false;
-    return match.delegatedToTeamIds.some(
-      (tid: Types.ObjectId) => tid.toString() === myTeamId
-    );
+    return match.delegations.some((d) => d.teamId === myTeamId);
   }
 
-  function isMyMatch(match: { teamAId: Types.ObjectId; teamBId: Types.ObjectId | null }) {
+  function isMyMatch(match: { teamAId: string; teamBId: string | null }) {
     if (!myTeamId) return false;
-    return (
-      match.teamAId.toString() === myTeamId ||
-      match.teamBId?.toString() === myTeamId
-    );
+    return match.teamAId === myTeamId || match.teamBId === myTeamId;
   }
 
   const rosterContent = (
@@ -129,15 +133,15 @@ export default async function TournamentPage({
       ) : (
         <div className="space-y-2">
           {fullTeams.map((team) => {
-            const isMyTeam = myTeam?._id.toString() === team._id.toString();
+            const isMyTeam = myTeam?.id === team.id;
             const canRename = isMyTeam && tournament.status === "open" && tournament.mode === "doubles";
             const label = teamLabel(team);
             return (
-              <div key={team._id.toString()} className="bg-surface rounded-xl px-5 py-3 text-chalk text-sm flex items-center gap-2">
+              <div key={team.id} className="bg-surface rounded-xl px-5 py-3 text-chalk text-sm flex items-center gap-2">
                 <Users className="size-4 text-muted-foreground shrink-0" />
                 {canRename ? (
                   <RenameTeamForm
-                    teamId={team._id.toString()}
+                    teamId={team.id}
                     tournamentId={id}
                     currentName={team.name ?? ""}
                     displayLabel={label}
@@ -147,15 +151,15 @@ export default async function TournamentPage({
             );
           })}
           {openTeams.map((team) => {
-            const isMyTeam = myTeam?._id.toString() === team._id.toString();
+            const isMyTeam = myTeam?.id === team.id;
             const canRename = isMyTeam && tournament.status === "open" && tournament.mode === "doubles";
             const label = teamLabel(team);
             return (
-              <div key={team._id.toString()} className="bg-surface rounded-xl px-5 py-3 text-muted-foreground text-sm flex items-center gap-2 italic">
+              <div key={team.id} className="bg-surface rounded-xl px-5 py-3 text-muted-foreground text-sm flex items-center gap-2 italic">
                 <Users className="size-4 shrink-0" />
                 {canRename ? (
                   <RenameTeamForm
-                    teamId={team._id.toString()}
+                    teamId={team.id}
                     tournamentId={id}
                     currentName={team.name ?? ""}
                     displayLabel={label}
@@ -182,37 +186,37 @@ export default async function TournamentPage({
         <p className="text-muted-foreground text-sm">Groups not yet generated.</p>
       ) : (
         groups.map((group) => {
-          const gMatches = groupMatches.filter(
-            (m) => m.groupId?.toString() === group._id.toString()
+          const gMatches = groupMatches.filter((m) => m.groupId === group.id);
+          const standings = computeStandings(
+            group.teams.map((gt) => gt.teamId),
+            gMatches,
+            teamNameMap
           );
-          const standings = computeStandings(group.teamIds, gMatches, teamNameMap);
           return (
-            <div key={group._id.toString()} className="space-y-4">
+            <div key={group.id} className="space-y-4">
               <h3 className="text-chalk text-lg">{group.name}</h3>
               <StandingsTable standings={standings} />
               <div className="space-y-2">
                 {gMatches.map((match) => {
                   const canRecord = canRecordMatch(match);
-                  const inMyMatch = isMyMatch(match);
                   const isDelegated = myTeamId
-                    ? match.delegatedToTeamIds.some(
-                        (tid: Types.ObjectId) => tid.toString() === myTeamId
-                      )
+                    ? match.delegations.some((d) => d.teamId === myTeamId)
                     : false;
-                  const recordA = recordResult.bind(null, match._id.toString(), match.teamAId.toString());
+                  const recordA = recordResult.bind(null, match.id, match.teamAId);
                   const recordB = match.teamBId
-                    ? recordResult.bind(null, match._id.toString(), match.teamBId.toString())
+                    ? recordResult.bind(null, match.id, match.teamBId)
                     : null;
-                  const delegateAction = isOrganizer && inMyMatch === false && !match.winnerId
-                    ? delegateMatch.bind(
-                        null,
-                        match._id.toString(),
-                        [match.teamAId.toString(), match.teamBId?.toString() ?? ""].filter(Boolean)
-                      )
-                    : null;
+                  const inMyMatch = isMyMatch(match);
+                  const delegateAction =
+                    isOrganizer && !inMyMatch && !match.winnerId
+                      ? delegateMatch.bind(null, match.id, [
+                          match.teamAId,
+                          ...(match.teamBId ? [match.teamBId] : []),
+                        ])
+                      : null;
                   return (
                     <MatchCard
-                      key={match._id.toString()}
+                      key={match.id}
                       match={match}
                       teamNameMap={teamNameMap}
                       canRecord={canRecord}
@@ -316,6 +320,14 @@ export default async function TournamentPage({
   );
 }
 
+type MatchWithDelegations = {
+  id: string;
+  teamAId: string;
+  teamBId: string | null;
+  winnerId: string | null;
+  delegations: { teamId: string }[];
+};
+
 function MatchCard({
   match,
   teamNameMap,
@@ -326,13 +338,7 @@ function MatchCard({
   recordBAction,
   delegateAction,
 }: {
-  match: {
-    _id: Types.ObjectId;
-    teamAId: Types.ObjectId;
-    teamBId: Types.ObjectId | null;
-    winnerId: Types.ObjectId | null;
-    delegatedToTeamIds: Types.ObjectId[];
-  };
+  match: MatchWithDelegations;
   teamNameMap: Record<string, string>;
   canRecord: boolean;
   isDelegated: boolean;
@@ -341,19 +347,18 @@ function MatchCard({
   recordBAction: ((fd: FormData) => Promise<void>) | null;
   delegateAction: ((fd: FormData) => Promise<void>) | null;
 }) {
-  const aName = teamNameMap[match.teamAId.toString()] ?? "Unknown";
-  const bName = match.teamBId ? teamNameMap[match.teamBId.toString()] ?? "Unknown" : "BYE";
-  const winnerKey = match.winnerId?.toString();
+  const aName = teamNameMap[match.teamAId] ?? "Unknown";
+  const bName = match.teamBId ? teamNameMap[match.teamBId] ?? "Unknown" : "BYE";
   const played = !!match.winnerId;
 
   return (
     <div className="bg-surface rounded-xl px-5 py-4 space-y-3">
       <div className="flex items-center gap-3 text-sm">
-        <span className={cn("flex-1 text-chalk", winnerKey === match.teamAId.toString() && "text-win font-medium")}>
+        <span className={cn("flex-1 text-chalk", match.winnerId === match.teamAId && "text-win font-medium")}>
           {aName}
         </span>
         <span className="text-muted-foreground text-xs">vs</span>
-        <span className={cn("flex-1 text-right text-chalk", match.teamBId && winnerKey === match.teamBId.toString() && "text-win font-medium")}>
+        <span className={cn("flex-1 text-right text-chalk", match.teamBId && match.winnerId === match.teamBId && "text-win font-medium")}>
           {bName}
         </span>
         {played && <span className="text-xs text-win shrink-0">✓</span>}
@@ -394,18 +399,11 @@ function BracketView({
   myTeamId,
   canRecordMatch,
 }: {
-  matches: {
-    _id: Types.ObjectId;
-    teamAId: Types.ObjectId;
-    teamBId: Types.ObjectId | null;
-    winnerId: Types.ObjectId | null;
-    round: string | null;
-    delegatedToTeamIds: Types.ObjectId[];
-  }[];
+  matches: (MatchWithDelegations & { round: string | null })[];
   teamNameMap: Record<string, string>;
   isOrganizer: boolean;
   myTeamId?: string;
-  canRecordMatch: (match: { delegatedToTeamIds: Types.ObjectId[] }) => boolean;
+  canRecordMatch: (match: { delegations: { teamId: string }[] }) => boolean;
 }) {
   const rounds = ["QF", "SF", "Final"];
   const grouped: Record<string, typeof matches> = {};
@@ -421,13 +419,13 @@ function BracketView({
             <h4 className="text-muted-foreground text-xs uppercase tracking-wider">{round}</h4>
             {grouped[round].map((match) => {
               const canRecord = canRecordMatch(match);
-              const recordA = recordResult.bind(null, match._id.toString(), match.teamAId.toString());
+              const recordA = recordResult.bind(null, match.id, match.teamAId);
               const recordB = match.teamBId
-                ? recordResult.bind(null, match._id.toString(), match.teamBId.toString())
+                ? recordResult.bind(null, match.id, match.teamBId)
                 : null;
               return (
                 <MatchCard
-                  key={match._id.toString()}
+                  key={match.id}
                   match={match}
                   teamNameMap={teamNameMap}
                   canRecord={canRecord}
@@ -447,20 +445,19 @@ function BracketView({
 }
 
 function computeStandings(
-  teamIds: Types.ObjectId[],
-  matches: { teamAId: Types.ObjectId; teamBId: Types.ObjectId; winnerId: Types.ObjectId | null }[],
+  teamIds: string[],
+  matches: { teamAId: string; teamBId: string | null; winnerId: string | null }[],
   teamNameMap: Record<string, string>
 ) {
   const stats: Record<string, { name: string; played: number; won: number; lost: number; points: number }> = {};
   for (const tid of teamIds) {
-    const key = tid.toString();
-    stats[key] = { name: teamNameMap[key] ?? "Unknown", played: 0, won: 0, lost: 0, points: 0 };
+    stats[tid] = { name: teamNameMap[tid] ?? "Unknown", played: 0, won: 0, lost: 0, points: 0 };
   }
   for (const m of matches) {
-    if (!m.winnerId) continue;
-    const aKey = m.teamAId.toString();
-    const bKey = m.teamBId.toString();
-    const wKey = m.winnerId.toString();
+    if (!m.winnerId || !m.teamBId) continue;
+    const aKey = m.teamAId;
+    const bKey = m.teamBId;
+    const wKey = m.winnerId;
     if (stats[aKey]) stats[aKey].played++;
     if (stats[bKey]) stats[bKey].played++;
     if (wKey === aKey) {
@@ -512,7 +509,7 @@ function StandingsTable({
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
     open: { label: "Open", className: "text-win" },
-    "in-progress": { label: "In Progress", className: "text-gold" },
+    in_progress: { label: "In Progress", className: "text-gold" },
     complete: { label: "Complete", className: "text-muted-foreground" },
   };
   const { label, className } = map[status] ?? { label: status, className: "" };

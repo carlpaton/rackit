@@ -1,6 +1,6 @@
 # Rackit
 
-A Pool Tournament App. Create and manage tournaments with group stage round-robin and single elimination knockout. Built with Next.js 16, MongoDB, and NextAuth.js.
+A Pool Tournament App. Create and manage tournaments with group stage round-robin and single elimination knockout. Built with Next.js 16, Supabase PostgreSQL, Prisma, and NextAuth.js.
 
 Live: https://rackit.vercel.app
 
@@ -8,10 +8,39 @@ Live: https://rackit.vercel.app
 
 ## Getting Started
 
-Install dependencies and run the development server:
+### 1. Create a Supabase project
+
+Go to [supabase.com](https://supabase.com), create a new project, then grab two connection strings from **Connect → ORM Third Party → Prisma**:
+
+- **Transaction pooler** (port 6543) → `DATABASE_URL`
+- **Direct connection** (port 5432) → `DIRECT_URL`
+
+### 2. Configure environment variables
+
+Copy `.env.example` to `.env.local` and fill in your values:
+
+```bash
+cp .env.example .env.local
+```
+
+Generate `NEXTAUTH_SECRET` with:
+
+```bash
+openssl rand -base64 32
+```
+
+### 3. Install dependencies and create the database schema
 
 ```bash
 npm install
+npx prisma migrate dev --name init
+```
+
+`prisma migrate dev` creates the migration files and applies the schema to your Supabase database. The generated `prisma/migrations/` folder is committed so Vercel can replay migrations on deploy.
+
+### 4. Run the development server
+
+```bash
 npm run dev
 ```
 

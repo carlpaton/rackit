@@ -1,13 +1,11 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { MongoDBAdapter } from "@auth/mongodb-adapter";
+import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
-import clientPromise from "@/lib/mongodb";
-import { connectDB } from "@/lib/db";
-import { User } from "@/models/user";
+import prisma from "@/lib/prisma";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: MongoDBAdapter(clientPromise),
+  adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
@@ -19,7 +17,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.displayName =
-          user.displayName ?? token.email?.split("@")[0] ?? "";
+          (user as { displayName?: string }).displayName ?? token.email?.split("@")[0] ?? "";
       }
       return token;
     },
@@ -38,11 +36,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        await connectDB();
-        const user = await User.findOne({
-          email: (credentials.email as string).toLowerCase(),
+        const user = await prisma.user.findUnique({
+          where: { email: (credentials.email as string).toLowerCase() },
         });
-        if (!user) return null;
+        if (!user?.passwordHash) return null;
 
         const isValid = await bcrypt.compare(
           credentials.password as string,
@@ -51,7 +48,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!isValid) return null;
 
         return {
-          id: user._id.toString(),
+          id: user.id,
           email: user.email,
           displayName: user.displayName,
         };
