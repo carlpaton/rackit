@@ -354,14 +354,17 @@ function MatchCard({
   return (
     <div className="bg-surface rounded-xl px-5 py-4 space-y-3">
       <div className="flex items-center gap-3 text-sm">
-        <span className={cn("flex-1 text-chalk", match.winnerId === match.teamAId && "text-win font-medium")}>
+        <span className={cn("flex-1 text-chalk flex items-center gap-1", match.winnerId === match.teamAId && "text-win font-medium", played && match.winnerId !== match.teamAId && "text-loss-text")}>
           {aName}
+          {played && match.winnerId === match.teamAId && <span className="text-win">✓</span>}
+          {played && match.winnerId !== match.teamAId && <span className="text-loss-text">✗</span>}
         </span>
         <span className="text-muted-foreground text-xs">vs</span>
-        <span className={cn("flex-1 text-right text-chalk", match.teamBId && match.winnerId === match.teamBId && "text-win font-medium")}>
+        <span className={cn("flex-1 text-right text-chalk flex items-center justify-end gap-1", match.teamBId && match.winnerId === match.teamBId && "text-win font-medium", played && match.teamBId && match.winnerId !== match.teamBId && "text-loss-text")}>
+          {played && match.teamBId && match.winnerId === match.teamBId && <span className="text-win">✓</span>}
+          {played && match.teamBId && match.winnerId !== match.teamBId && <span className="text-loss-text">✗</span>}
           {bName}
         </span>
-        {played && <span className="text-xs text-win shrink-0">✓</span>}
       </div>
 
       {!played && canRecord && match.teamBId && (
@@ -484,9 +487,9 @@ function StandingsTable({
         <thead>
           <tr className="text-muted-foreground text-xs border-b border-white/10">
             <th className="text-left px-4 py-2">Team</th>
-            <th className="text-center px-3 py-2">P</th>
-            <th className="text-center px-3 py-2">W</th>
-            <th className="text-center px-3 py-2">L</th>
+            <th className="text-center px-3 py-2">Played</th>
+            <th className="text-center px-3 py-2">Won</th>
+            <th className="text-center px-3 py-2">Lost</th>
             <th className="text-center px-3 py-2 text-gold">Pts</th>
           </tr>
         </thead>
@@ -496,7 +499,7 @@ function StandingsTable({
               <td className="text-chalk px-4 py-2">{row.name}</td>
               <td className="text-center text-muted-foreground px-3 py-2">{row.played}</td>
               <td className="text-center text-win px-3 py-2">{row.won}</td>
-              <td className="text-center text-loss px-3 py-2">{row.lost}</td>
+              <td className="text-center text-loss-text px-3 py-2">{row.lost}</td>
               <td className="text-center text-gold font-medium px-3 py-2">{row.points}</td>
             </tr>
           ))}

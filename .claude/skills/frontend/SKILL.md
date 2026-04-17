@@ -33,7 +33,8 @@ Use these Tailwind custom colours (defined in `tailwind.config`). Never use raw 
 | `text-chalk` | Primary text | `#f0ede4` |
 | `accent-gold` | CTAs, highlights, active states | `#c9a84c` |
 | `result-win` | Win indicators, positive states | `#4caf72` |
-| `result-loss` | Loss indicators, destructive actions | `#8b1a1a` |
+| `result-loss` | Loss backgrounds, destructive button fills | `#8b1a1a` |
+| `loss-text` | Loss text/icons on dark green surfaces (readable red) | `#e05555` |
 
 Dark theme only — there is no light/dark toggle.
 

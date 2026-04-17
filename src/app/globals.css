@@ -54,6 +54,7 @@
   --color-gold: var(--gold);
   --color-win: var(--win);
   --color-loss: var(--loss);
+  --color-loss-text: var(--loss-text);
 }
 
 :root {
@@ -93,6 +94,7 @@
   --gold: #c9a84c;
   --win: #4caf72;
   --loss: #8b1a1a;
+  --loss-text: #e05555;
 }
 
 .dark {
