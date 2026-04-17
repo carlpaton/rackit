@@ -6,6 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Users, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { joinSingles, joinHalfTeam, startHalfTeam } from "./actions";
+import { SubmitButton } from "@/components/ui/submit-button";
 
 export default async function JoinTournamentPage({
   params,
@@ -42,13 +43,10 @@ export default async function JoinTournamentPage({
             You&apos;ll join as a solo player. Ready?
           </p>
           <form action={joinAction} className="flex gap-3">
-            <button
-              type="submit"
-              className={cn(buttonVariants({ size: "default" }), "flex-1")}
-            >
+            <SubmitButton className={cn(buttonVariants({ size: "default" }), "flex-1")}>
               <UserPlus className="size-4" />
               Join Tournament
-            </button>
+            </SubmitButton>
             <Link
               href="/dashboard"
               className="flex-1 flex items-center justify-center rounded-lg border border-white/10 text-sm text-muted-foreground hover:text-chalk hover:border-white/20 transition-colors"
@@ -113,12 +111,9 @@ export default async function JoinTournamentPage({
                       : `${partnerName} is looking for a partner`}
                   </span>
                   <form action={joinAction}>
-                    <button
-                      type="submit"
-                      className={buttonVariants({ size: "sm" })}
-                    >
+                    <SubmitButton className={buttonVariants({ size: "sm" })}>
                       Join Team
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
               );
@@ -146,13 +141,10 @@ export default async function JoinTournamentPage({
               />
             </div>
             <div className="flex gap-3">
-              <button
-                type="submit"
-                className={cn(buttonVariants({ size: "default" }), "flex-1")}
-              >
+              <SubmitButton className={cn(buttonVariants({ size: "default" }), "flex-1")}>
                 <UserPlus className="size-4" />
                 Start a Half-Team
-              </button>
+              </SubmitButton>
               <Link
                 href="/dashboard"
                 className="flex-1 flex items-center justify-center rounded-lg border border-white/10 text-sm text-muted-foreground hover:text-chalk hover:border-white/20 transition-colors"

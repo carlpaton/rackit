@@ -15,6 +15,7 @@ import {
 } from "./actions";
 import { TournamentTabs } from "./TournamentTabs";
 import { RenameTeamForm } from "./RenameTeamForm";
+import { SubmitButton } from "@/components/ui/submit-button";
 
 export default async function TournamentPage({
   params,
@@ -177,9 +178,9 @@ export default async function TournamentPage({
     <section className="space-y-8">
       {isOrganizer && allGroupMatchesPlayed && knockoutMatches.length === 0 && (
         <form action={advanceAction}>
-          <button type="submit" className={buttonVariants({ size: "default" })}>
+          <SubmitButton className={buttonVariants({ size: "default" })}>
             Advance to Knockout
-          </button>
+          </SubmitButton>
         </form>
       )}
       {groups.length === 0 ? (
@@ -288,16 +289,16 @@ export default async function TournamentPage({
           )}
           {canLeave && (
             <form action={leaveAction}>
-              <button type="submit" className={cn(buttonVariants({ variant: "destructive", size: "default" }))}>
+              <SubmitButton className={cn(buttonVariants({ variant: "destructive", size: "default" }))}>
                 Leave Tournament
-              </button>
+              </SubmitButton>
             </form>
           )}
           {canStart && (
             <form action={startAction}>
-              <button type="submit" className={cn(buttonVariants({ size: "default" }))}>
+              <SubmitButton className={cn(buttonVariants({ size: "default" }))}>
                 Start Tournament
-              </button>
+              </SubmitButton>
             </form>
           )}
           {isOrganizer && fullTeams.length < 2 && (
@@ -370,15 +371,15 @@ function MatchCard({
       {!played && canRecord && match.teamBId && (
         <div className="flex gap-2">
           <form action={recordAAction} className="flex-1">
-            <button type="submit" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full text-win border-win/30 hover:border-win/60")}>
+            <SubmitButton className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full text-win border-win/30 hover:border-win/60")}>
               {aName} won
-            </button>
+            </SubmitButton>
           </form>
           {recordBAction && (
             <form action={recordBAction} className="flex-1">
-              <button type="submit" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full text-win border-win/30 hover:border-win/60")}>
+              <SubmitButton className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full text-win border-win/30 hover:border-win/60")}>
                 {bName} won
-              </button>
+              </SubmitButton>
             </form>
           )}
         </div>
@@ -386,9 +387,9 @@ function MatchCard({
 
       {!played && isOrganizer && delegateAction && (
         <form action={delegateAction}>
-          <button type="submit" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-xs text-muted-foreground")}>
+          <SubmitButton className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-xs text-muted-foreground")}>
             {isDelegated ? "Revoke delegation" : "Delegate to players"}
-          </button>
+          </SubmitButton>
         </form>
       )}
     </div>
