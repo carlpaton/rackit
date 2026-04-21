@@ -233,6 +233,14 @@
       "description": "Remove all Mongoose models and replace every database query in server actions and API routes with Prisma Client calls. All 5 Mongoose model files (src/models/user.ts, tournament.ts, team.ts, match.ts, group.ts) are deleted. Every server action that currently calls Model.create(), Model.find(), Model.findById(), Model.findOneAndUpdate(), Model.deleteOne(), etc. is rewritten using the Prisma Client (prisma.user.create(), prisma.tournament.findMany(), etc.). The Prisma Client instance should be a singleton following the recommended pattern for Next.js (src/lib/prisma.ts — reuse global instance in dev to avoid hot-reload exhaustion). Acceptance criteria: no Mongoose imports remain anywhere in the codebase; all existing features work identically (tournament CRUD, join/leave, group stage, knockout bracket, result recording, delegation); prisma studio can inspect all app data; no runtime errors from missing or mismatched field names between the old Mongoose schema and the new Prisma schema.",
       "steps": [],
       "dependsOn": ["PRD-025"]
+    },
+    {
+      "id": "PRD-027",
+      "status": "done",
+      "heading": "Public/private tournaments with unique join code",
+      "description": "Add visibility control to tournaments and generate a short unique join code for every tournament. Schema changes: add isPublic (Boolean, default true) and joinCode (String, unique) to the Tournament model. Code generation: on tournament creation, generate the shortest possible alphanumeric code that is guaranteed unique — attempt a 4-character base-36 code (0-9 + a-z), retry with 5 characters if a collision occurs, and so on. Create form: add a Public / Private toggle (default Public) below the Mode field. Dashboard behaviour: private tournaments are hidden from the 'Open Tournaments' section for users who are neither a member nor the organiser — they are invisible until the join-by-code flow is built. Join code display: the join code is shown only to the organiser — on their dashboard tournament card and on the tournament detail page — formatted prominently enough to share (e.g. 'Join code: AB3X'). Non-organiser users do not see the code anywhere. No join-by-code flow is implemented in this item — code display and schema only. Acceptance criteria: every new tournament has a unique joinCode; create form has a working Public/Private toggle defaulting to Public; private tournaments do not appear in Open Tournaments for non-members/non-organisers; the organiser sees the join code on their dashboard card and on the tournament detail page.",
+      "steps": [],
+      "dependsOn": ["PRD-007"]
     }
   ]
 }

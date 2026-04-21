@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { buttonVariants } from "@/components/ui/button";
-import { Users, Plus } from "lucide-react";
+import { Users, Plus, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default async function DashboardPage() {
@@ -34,6 +34,7 @@ export default async function DashboardPage() {
   const openTournaments = await prisma.tournament.findMany({
     where: {
       status: "open",
+      isPublic: true,
       id: { notIn: myTournamentIds },
     },
     orderBy: { createdAt: "desc" },
@@ -113,11 +114,19 @@ export default async function DashboardPage() {
                       <h3 className="text-chalk text-lg leading-tight">
                         {t.name}
                       </h3>
-                      {isOrganizer && (
-                        <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 rounded-full shrink-0">
-                          Organizer
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!t.isPublic && (
+                          <span className="text-xs bg-white/10 text-muted-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Lock className="size-2.5" />
+                            Private
+                          </span>
+                        )}
+                        {isOrganizer && (
+                          <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 rounded-full">
+                            Organizer
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
@@ -134,6 +143,11 @@ export default async function DashboardPage() {
                     {organizerName && (
                       <p className="text-xs text-muted-foreground">
                         Organised by {organizerName}
+                      </p>
+                    )}
+                    {isOrganizer && (
+                      <p className="text-xs font-mono text-gold/80 tracking-wider mt-1">
+                        Join code: {t.joinCode.toUpperCase()}
                       </p>
                     )}
                   </div>

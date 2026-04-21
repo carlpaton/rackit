@@ -14,7 +14,7 @@ export default function CreateTournamentPage() {
         <div>
           <h1 className="text-3xl text-chalk">Create Tournament</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Set up a new public tournament. You&apos;ll be the organizer.
+            You&apos;ll be the organizer.
           </p>
         </div>
 
@@ -56,6 +56,33 @@ export default function CreateTournamentPage() {
                 />
                 <span className="text-sm text-chalk">Doubles</span>
                 <span className="text-xs text-muted-foreground">(2 players per team)</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium text-chalk">Visibility</legend>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="visibility"
+                  value="public"
+                  defaultChecked
+                  className="accent-gold"
+                />
+                <span className="text-sm text-chalk">Public</span>
+                <span className="text-xs text-muted-foreground">(anyone can see and join)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="visibility"
+                  value="private"
+                  className="accent-gold"
+                />
+                <span className="text-sm text-chalk">Private</span>
+                <span className="text-xs text-muted-foreground">(join by code only)</span>
               </label>
             </div>
           </fieldset>

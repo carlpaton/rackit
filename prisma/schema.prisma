@@ -66,6 +66,8 @@ model Tournament {
   mode            TournamentMode
   status          TournamentStatus @default(open)
   path            TournamentPath?
+  isPublic        Boolean          @default(true)
+  joinCode        String           @unique
   organizerUserId String
   winnerTeamId    String?
   createdAt       DateTime         @default(now())

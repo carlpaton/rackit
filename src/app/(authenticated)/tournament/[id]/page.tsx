@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { buttonVariants } from "@/components/ui/button";
-import { Users, ArrowLeft, Trophy } from "lucide-react";
+import { Users, ArrowLeft, Trophy, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   leaveTournament,
@@ -269,8 +269,16 @@ export default async function TournamentPage({
         <Link href="/dashboard" className="text-muted-foreground hover:text-chalk transition-colors">
           <ArrowLeft className="size-5" />
         </Link>
-        <div>
-          <h1 className="text-3xl text-chalk">{tournament.name}</h1>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl text-chalk">{tournament.name}</h1>
+            {!tournament.isPublic && (
+              <span className="text-xs bg-white/10 text-muted-foreground px-2 py-0.5 rounded-full flex items-center gap-1 self-center">
+                <Lock className="size-2.5" />
+                Private
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-3 text-sm text-muted-foreground mt-0.5">
             <span className="flex items-center gap-1">
               <Users className="size-3.5" />
@@ -278,6 +286,11 @@ export default async function TournamentPage({
             </span>
             <StatusBadge status={tournament.status} />
           </div>
+          {isOrganizer && (
+            <p className="text-xs font-mono text-gold/80 tracking-wider mt-1">
+              Join code: {tournament.joinCode.toUpperCase()}
+            </p>
+          )}
         </div>
       </div>
 
