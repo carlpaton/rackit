@@ -183,7 +183,7 @@ export default async function RankingsPage() {
                 <p className="text-3xl font-bold text-chalk">
                   <span className="text-win">{myQGWins}W</span>
                   <span className="text-muted-foreground mx-2">/</span>
-                  <span className="text-destructive">{myQGLosses}L</span>
+                  <span className="text-loss-text">{myQGLosses}L</span>
                 </p>
               )}
             </div>

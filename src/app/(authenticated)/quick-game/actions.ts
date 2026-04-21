@@ -95,5 +95,6 @@ export async function recordQuickGameResult(
   });
 
   revalidatePath("/dashboard");
+  revalidatePath("/rankings");
   return null;
 }
