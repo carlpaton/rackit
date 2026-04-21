@@ -241,6 +241,46 @@
       "description": "Add visibility control to tournaments and generate a short unique join code for every tournament. Schema changes: add isPublic (Boolean, default true) and joinCode (String, unique) to the Tournament model. Code generation: on tournament creation, generate the shortest possible alphanumeric code that is guaranteed unique — attempt a 4-character base-36 code (0-9 + a-z), retry with 5 characters if a collision occurs, and so on. Create form: add a Public / Private toggle (default Public) below the Mode field. Dashboard behaviour: private tournaments are hidden from the 'Open Tournaments' section for users who are neither a member nor the organiser — they are invisible until the join-by-code flow is built. Join code display: the join code is shown only to the organiser — on their dashboard tournament card and on the tournament detail page — formatted prominently enough to share (e.g. 'Join code: AB3X'). Non-organiser users do not see the code anywhere. No join-by-code flow is implemented in this item — code display and schema only. Acceptance criteria: every new tournament has a unique joinCode; create form has a working Public/Private toggle defaulting to Public; private tournaments do not appear in Open Tournaments for non-members/non-organisers; the organiser sees the join code on their dashboard card and on the tournament detail page.",
       "steps": [],
       "dependsOn": ["PRD-007"]
+    },
+    {
+      "id": "PRD-028",
+      "status": "done",
+      "heading": "Quick Game schema and join code",
+      "description": "Define the QuickGame Prisma model and join code generation logic. Model fields: id, joinCode (String, unique — separate namespace from Tournament join codes so they never clash), creatorId (FK to User), opponentId (FK to User, nullable), winnerId (FK to User, nullable), status ('waiting' | 'active' | 'complete'), createdAt. Join code generation: same algorithm as tournaments — attempt a 4-character base-36 code (0-9 + a-z), retry with 5 characters on collision, and so on — but check only against existing QuickGame joinCodes, not Tournament joinCodes. Add the QuickGame model to prisma/schema.prisma and run a migration. Acceptance criteria: QuickGame table exists in Supabase with all fields; joinCode has a unique index; the code generation utility is reusable (or duplicated cleanly) from the tournament equivalent; no code clash is possible between QuickGame and Tournament codes because they are checked against separate tables.",
+      "steps": [],
+      "dependsOn": ["PRD-025"]
+    },
+    {
+      "id": "PRD-029",
+      "status": "done",
+      "heading": "Create, join, and cancel Quick Games",
+      "description": "Add the full Quick Game entry flow to the dashboard. A '+ Quick Game' button sits alongside 'Create Tournament' on the dashboard. Clicking it opens a modal (or inline section) with two options: 'Create New' and 'Join with Code'. Create New: generates a join code, creates a QuickGame record with status='waiting' and creatorId set to the current user, then immediately shows the join code prominently so the creator can share it. The creator sees a 'Waiting for opponent…' state with a Cancel button; cancelling deletes the QuickGame record. Join with Code: shows a text input for the join code; on submit, validates the code exists and is in 'waiting' status, sets opponentId to the current user, and transitions status to 'active'. Guard: a user cannot join their own game (creatorId === current user → show error). A user cannot join a game that is already 'active' or 'complete'. Dashboard: a 'My Quick Games' section lists all quick games where the user is creator or opponent and status is 'waiting' or 'active', showing the opponent's displayName (or 'Waiting for opponent' if still waiting) and current status. Completed games are not shown in this section (they surface on the Rankings page). Acceptance criteria: create flow generates a unique code and shows it; join flow validates the code and transitions to active; creator can cancel a waiting game; a user cannot join their own game; the dashboard quick games section updates correctly.",
+      "steps": [],
+      "dependsOn": ["PRD-028"]
+    },
+    {
+      "id": "PRD-030",
+      "status": "done",
+      "heading": "Record Quick Game result",
+      "description": "Allow either player to record the winner of an active Quick Game. Once a game reaches status='active' (both players joined), both the creator and the opponent see a 'Record Result' UI on the dashboard quick games card — two buttons, one labelled with the creator's displayName and one with the opponent's displayName. Clicking either button sets winnerId to that user's id and transitions the game to status='complete'. Either player can record the result — no delegation or organizer concept applies here. Re-recording is not allowed once status='complete' (the buttons disappear). Completed games are removed from the 'My Quick Games' dashboard section and appear only on the Rankings page. Acceptance criteria: both players see the record result UI when status='active'; clicking a name sets that user as winner and marks the game complete; completed games no longer appear in the dashboard quick games section; the correct winner is stored and readable for the Rankings page.",
+      "steps": [],
+      "dependsOn": ["PRD-029"]
+    },
+    {
+      "id": "PRD-031",
+      "status": "done",
+      "heading": "Rankings page — personal stats and global leaderboard",
+      "description": "Add a Rankings page at /rankings, linked from the main nav. The page has two sections: Personal Stats (shown first, scoped to the logged-in user) and Global Leaderboard. Personal Stats — two sub-sections: (1) Tournament history: a list of every tournament the user participated in as a player, showing tournament name, finishing position (1st, 2nd, 3rd/4th for SF losers, and the round eliminated for earlier exits — e.g. 'Quarter-final'), and a trophy icon for 1st place. Finishing position is derived from knockout match results: winner of the Final = 1st, loser of the Final = 2nd, SF losers = 3rd/4th, QF losers = 5th–8th, and so on; group stage eliminations show 'Group stage'. (2) Quick game record: total wins and total losses from all completed quick games where the user was a participant, shown as e.g. '12W / 4L'. Global Leaderboard — two ranked tables side by side (or stacked on mobile): (1) Tournament points leaderboard: all users ranked by cumulative tournament points (1st place = 3 pts, 2nd = 2 pts, 3rd/4th = 1 pt, earlier exits = 0 pts) across all tournaments they have participated in — show displayName and total points. (2) Quick game wins leaderboard: all users ranked by total quick game wins — show displayName and win count. Both leaderboard tables show rank (1, 2, 3…), displayName, and the relevant metric. Only users who have participated in at least one tournament (for table 1) or completed at least one quick game (for table 2) appear in each respective table. The logged-in user's row is highlighted in both tables. Acceptance criteria: personal stats show correct tournament history and finishing positions; quick game record is accurate; both leaderboard tables rank correctly; the logged-in user is highlighted; the page is linked from the nav; users with no activity are omitted from leaderboards.",
+      "steps": [],
+      "dependsOn": ["PRD-030", "PRD-017"]
+    },
+    {
+      "id": "PRD-032",
+      "status": "done",
+      "heading": "Join tournament by code and hide code when complete",
+      "description": "Two dashboard improvements related to join codes. (1) Join by code in Open Tournaments: add a text input (with a 'Find Tournament' button) at the top of the Open Tournaments section. When the user submits a code, the server looks up any tournament with that joinCode regardless of visibility (public or private). If found and status is not 'complete', the tournament card is displayed inline below the input with the standard join affordance — the user can join from there using the existing singles or doubles flow. If the tournament is already complete, show an error: 'This tournament has ended'. If the code does not match any tournament, show 'Invalid code'. If the user is already a member or organiser of that tournament, show 'You are already in this tournament'. (2) Hide join code on complete tournaments: the join code is currently shown to the organiser on their My Tournaments dashboard card. Once a tournament reaches status='complete', the join code must no longer be displayed anywhere — remove it from the organiser's dashboard card and from the tournament detail page. Acceptance criteria: the code input in Open Tournaments finds any non-complete tournament by code (public or private); the correct error messages are shown for complete, invalid, and already-joined cases; finding a tournament by code shows the card with the join action; the join code is hidden from all UI once the tournament is complete.",
+      "steps": [],
+      "dependsOn": ["PRD-027", "PRD-006"]
     }
   ]
 }

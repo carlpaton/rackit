@@ -286,7 +286,7 @@ export default async function TournamentPage({
             </span>
             <StatusBadge status={tournament.status} />
           </div>
-          {isOrganizer && (
+          {isOrganizer && tournament.status !== "complete" && (
             <p className="text-xs font-mono text-gold/80 tracking-wider mt-1">
               Join code: {tournament.joinCode.toUpperCase()}
             </p>

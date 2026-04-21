@@ -36,6 +36,14 @@ export async function SiteHeader() {
           >
             Glossary
           </Link>
+          {isLoggedIn && (
+            <Link
+              href="/rankings"
+              className="text-sm text-chalk/60 hover:text-chalk transition-colors"
+            >
+              Rankings
+            </Link>
+          )}
           {isLoggedIn ? (
             <>
               {displayName && (

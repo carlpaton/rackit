@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { buttonVariants } from "@/components/ui/button";
 import { Users, Plus, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { QuickGameSection, QuickGameData } from "./QuickGameSection";
+import { TournamentCodeSearch } from "./TournamentCodeSearch";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -72,16 +74,39 @@ export default async function DashboardPage() {
     select: { id: true, displayName: true, email: true },
   });
   const organizerMap: Record<string, string> = Object.fromEntries(
-    organizers.map((u) => [
-      u.id,
-      u.displayName || u.email.split("@")[0],
-    ])
+    organizers.map((u) => [u.id, u.displayName || u.email.split("@")[0]])
   );
+
+  // Quick games (waiting or active)
+  const rawQuickGames = await prisma.quickGame.findMany({
+    where: {
+      OR: [{ creatorId: userId }, { opponentId: userId }],
+      status: { in: ["waiting", "active"] },
+    },
+    include: {
+      creator: { select: { id: true, displayName: true, email: true } },
+      opponent: { select: { id: true, displayName: true, email: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const quickGames: QuickGameData[] = rawQuickGames.map((g) => ({
+    id: g.id,
+    joinCode: g.joinCode,
+    status: g.status,
+    creatorId: g.creatorId,
+    creatorName: g.creator.displayName || g.creator.email.split("@")[0],
+    opponentId: g.opponentId,
+    opponentName: g.opponent
+      ? g.opponent.displayName || g.opponent.email.split("@")[0]
+      : null,
+    winnerId: g.winnerId,
+  }));
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl text-chalk">Tournaments</h1>
+        <h1 className="text-3xl text-chalk">Dashboard</h1>
         <Link
           href="/tournament/create"
           className={buttonVariants({ size: "default" })}
@@ -145,7 +170,7 @@ export default async function DashboardPage() {
                         Organised by {organizerName}
                       </p>
                     )}
-                    {isOrganizer && (
+                    {isOrganizer && t.status !== "complete" && (
                       <p className="text-xs font-mono text-gold/80 tracking-wider mt-1">
                         Join code: {t.joinCode.toUpperCase()}
                       </p>
@@ -167,10 +192,13 @@ export default async function DashboardPage() {
         )}
       </section>
 
+      <QuickGameSection userId={userId} quickGames={quickGames} />
+
       <section className="space-y-4">
         <h2 className="text-xl text-chalk border-b border-white/10 pb-2">
           Open Tournaments
         </h2>
+        <TournamentCodeSearch />
         {openTournaments.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             No open tournaments available to join.
