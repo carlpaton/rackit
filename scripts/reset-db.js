@@ -47,6 +47,9 @@ async function main() {
     const d7 = await prisma.tournament.deleteMany({});
     console.log(`Deleted ${d7.count} Tournament rows`);
 
+    const d8q = await prisma.quickGame.deleteMany({});
+    console.log(`Deleted ${d8q.count} QuickGame rows`);
+
     const d8 = await prisma.user.deleteMany({});
     console.log(`Deleted ${d8.count} User rows (cascades Account + Session)`);
 

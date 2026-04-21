@@ -39,8 +39,8 @@ The Tailwind utility prefix matches the CSS variable name exactly (e.g. `--color
 | `--color-chalk` | `text-chalk` | Primary text | `#f0ede4` |
 | `--color-gold` | `text-gold`, `bg-gold`, `border-gold` | CTAs, highlights, active states | `#c9a84c` |
 | `--color-win` | `text-win`, `bg-win` | Win indicators, positive states | `#4caf72` |
-| `--color-loss` | `text-loss`, `bg-loss` | Loss backgrounds, destructive fills | `#8b1a1a` |
-| `--color-loss-text` | `text-loss-text` | Loss text/icons on dark green (readable red) | `#e05555` |
+| `--color-loss` | `bg-loss` | Loss backgrounds, destructive fills only — **never use `text-loss` for text** | `#8b1a1a` |
+| `--color-loss-text` | `text-loss-text` | All error/loss text and icons on dark green — use this instead of `text-loss` or `text-destructive` | `#e05555` |
 
 Dark theme only — there is no light/dark toggle.
 
@@ -74,4 +74,5 @@ import { Trophy, Users, Table2 } from "lucide-react"
 - **Don't** use `"use client"` unless the component needs state, effects, or browser events
 - **Don't** create a new shadcn component if one already exists in `src/components/ui/`
 - **Don't** use arbitrary Tailwind colours — always use the palette tokens above
+- **Don't** use `text-loss` or `text-destructive` for error/loss text — use `text-loss-text` (`#e05555`) which is readable on dark green backgrounds
 - **Don't** create a `tailwind.config.js` — this project uses Tailwind v4, all config is in `src/app/globals.css`

@@ -44,7 +44,7 @@ export function TournamentCodeSearch() {
       {result && (
         <div>
           {"error" in result ? (
-            <p className="text-sm text-destructive">{result.error}</p>
+            <p className="text-sm text-loss-text">{result.error}</p>
           ) : (
             <div className="bg-surface rounded-xl p-4 shadow-md flex flex-col gap-3">
               <div className="space-y-1">

@@ -35,6 +35,15 @@ if (!["singles", "doubles"].includes(mode)) {
   process.exit(1);
 }
 
+function generateJoinCode() {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
 async function main() {
   if (!process.env.DATABASE_URL) {
     console.error("Error: DATABASE_URL not set in .env.local");
@@ -108,6 +117,7 @@ async function main() {
         name: tournamentName,
         mode,
         organizerUserId: organizerId,
+        joinCode: generateJoinCode(),
       },
     });
     console.log(`\nCreated tournament: "${tournamentName}" (${mode}) — id: ${tournament.id}`);
