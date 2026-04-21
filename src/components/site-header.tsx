@@ -2,6 +2,7 @@ import { auth, signOut } from "@/auth";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { MobileNav } from "@/components/mobile-nav";
 
 export async function SiteHeader() {
   const session = await auth();
@@ -15,7 +16,7 @@ export async function SiteHeader() {
   };
 
   return (
-    <header className="bg-surface border-b border-white/10">
+    <header className="bg-surface border-b border-white/10 relative">
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link
           href={isLoggedIn ? "/dashboard" : "/"}
@@ -23,7 +24,9 @@ export async function SiteHeader() {
         >
           Rackit
         </Link>
-        <div className="flex items-center gap-4">
+
+        {/* Desktop nav */}
+        <div className="hidden md:flex items-center gap-4">
           <Link
             href="/how-it-works"
             className="text-sm text-chalk/60 hover:text-chalk transition-colors"
@@ -65,6 +68,13 @@ export async function SiteHeader() {
             </Link>
           )}
         </div>
+
+        {/* Mobile burger */}
+        <MobileNav
+          isLoggedIn={isLoggedIn}
+          displayName={displayName}
+          logoutAction={logoutAction}
+        />
       </div>
     </header>
   );
