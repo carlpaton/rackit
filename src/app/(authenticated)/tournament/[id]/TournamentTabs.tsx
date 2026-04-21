@@ -12,6 +12,7 @@ interface Props {
   groupsContent: React.ReactNode;
   bracketContent: React.ReactNode;
   showGroups: boolean;
+  showBracket: boolean;
 }
 
 export function TournamentTabs({
@@ -21,13 +22,14 @@ export function TournamentTabs({
   groupsContent,
   bracketContent,
   showGroups,
+  showBracket,
 }: Props) {
   const [active, setActive] = useState<Tab>(defaultTab);
 
   const visibleTabs = [
     { key: "roster" as Tab, label: "Teams", show: true },
     { key: "groups" as Tab, label: "Groups", show: showGroups },
-    { key: "bracket" as Tab, label: "Bracket", show: true, locked: bracketLocked },
+    { key: "bracket" as Tab, label: "Bracket", show: showBracket, locked: bracketLocked },
   ].filter((t) => t.show);
 
   return (

@@ -96,6 +96,7 @@ export default async function TournamentPage({
     groupMatches.length > 0 && groupMatches.every((m) => m.winnerId !== null);
   const bracketLocked = tournament.path === "group_stage" && !allGroupMatchesPlayed;
   const showGroups = tournament.status !== "open" && tournament.path === "group_stage";
+  const showBracket = tournament.status !== "open";
 
   const defaultTab =
     tournament.status === "open"
@@ -313,6 +314,7 @@ export default async function TournamentPage({
         defaultTab={defaultTab as "roster" | "groups" | "bracket"}
         bracketLocked={bracketLocked}
         showGroups={showGroups}
+        showBracket={showBracket}
         rosterContent={rosterContent}
         groupsContent={groupsContent}
         bracketContent={bracketContent}

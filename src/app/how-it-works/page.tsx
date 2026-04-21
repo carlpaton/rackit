@@ -3,6 +3,7 @@ import Image from "next/image";
 import { auth } from "@/auth";
 import { buttonVariants } from "@/components/ui/button";
 import { Trophy, Users, List, GitMerge, Star } from "lucide-react";
+import { SiteHeader } from "@/components/site-header";
 
 const steps = [
   {
@@ -67,25 +68,7 @@ export default async function HowItWorksPage() {
 
   return (
     <div className="min-h-full flex flex-col">
-      <header className="bg-surface border-b border-white/10">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link
-            href={isLoggedIn ? "/dashboard" : "/"}
-            className="font-heading text-xl text-chalk hover:text-gold transition-colors"
-          >
-            Rackit
-          </Link>
-          {isLoggedIn ? (
-            <Link href="/dashboard" className={buttonVariants({ size: "sm" })}>
-              Dashboard
-            </Link>
-          ) : (
-            <Link href="/login" className={buttonVariants({ size: "sm" })}>
-              Sign in
-            </Link>
-          )}
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="flex-1">
         <div className="max-w-5xl mx-auto px-4 py-12">
@@ -135,7 +118,16 @@ export default async function HowItWorksPage() {
             })}
           </div>
 
-          <div className="mt-20 text-center space-y-4">
+          <div className="mt-20 text-center">
+            <p className="text-chalk/50 text-sm">
+              Unfamiliar with any terms?{" "}
+              <Link href="/glossary" className="text-gold hover:underline">
+                Check the glossary
+              </Link>
+            </p>
+          </div>
+
+          <div className="mt-12 text-center space-y-4">
             <h2 className="text-3xl text-chalk">Ready to play?</h2>
             <p className="text-chalk/60">
               {isLoggedIn
