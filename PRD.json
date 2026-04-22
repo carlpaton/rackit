@@ -281,6 +281,14 @@
       "description": "Two dashboard improvements related to join codes. (1) Join by code in Open Tournaments: add a text input (with a 'Find Tournament' button) at the top of the Open Tournaments section. When the user submits a code, the server looks up any tournament with that joinCode regardless of visibility (public or private). If found and status is not 'complete', the tournament card is displayed inline below the input with the standard join affordance — the user can join from there using the existing singles or doubles flow. If the tournament is already complete, show an error: 'This tournament has ended'. If the code does not match any tournament, show 'Invalid code'. If the user is already a member or organiser of that tournament, show 'You are already in this tournament'. (2) Hide join code on complete tournaments: the join code is currently shown to the organiser on their My Tournaments dashboard card. Once a tournament reaches status='complete', the join code must no longer be displayed anywhere — remove it from the organiser's dashboard card and from the tournament detail page. Acceptance criteria: the code input in Open Tournaments finds any non-complete tournament by code (public or private); the correct error messages are shown for complete, invalid, and already-joined cases; finding a tournament by code shows the card with the join action; the join code is hidden from all UI once the tournament is complete.",
       "steps": [],
       "dependsOn": ["PRD-027", "PRD-006"]
+    },
+    {
+      "id": "PRD-033",
+      "status": "done",
+      "heading": "Rules page — 8-ball rules and tournament format",
+      "description": "Add a public /rules page accessible to anyone (logged in or not), linked from the global nav alongside Glossary. The page covers two sections: (1) Playing Rules — a simplified summary of international 8-ball rules (WPA) covering: Aim of the Game, The Rack, Break Shot, Ball Groups (solids vs stripes), Calling Shots, Standard Fouls, and Winning/Losing. (2) How Rackit Works — a brief summary of the tournament format: group stage round-robin (top 2 advance), knockout single elimination, win/loss only (no scores), and Quick Games. Content must be accurate to WPA international rules. The page is public: it lives outside the (authenticated) route group (same as /how-it-works and /glossary), requires no login, and needs no proxy.ts change. Nav: add a 'Rules' link to site-header.tsx (desktop nav) and mobile-nav.tsx, positioned next to Rankings. Unlike Rankings, the Rules link is always visible regardless of login state. Acceptance criteria: /rules is accessible without a session; the Rules link appears in desktop and mobile nav for all users; the page has both sections (playing rules and Rackit format); content is accurate to WPA 8-ball rules.",
+      "steps": [],
+      "dependsOn": ["PRD-019"]
     }
   ]
 }

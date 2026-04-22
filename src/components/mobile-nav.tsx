@@ -38,6 +38,9 @@ export function MobileNav({ isLoggedIn, displayName, logoutAction }: Props) {
             <NavLink href="/glossary" onClick={() => setOpen(false)}>
               Glossary
             </NavLink>
+            <NavLink href="/rules" onClick={() => setOpen(false)}>
+              Rules
+            </NavLink>
             {isLoggedIn && (
               <NavLink href="/rankings" onClick={() => setOpen(false)}>
                 Rankings
