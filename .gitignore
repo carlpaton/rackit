@@ -32,3 +32,6 @@ Thumbs.db
 # TypeScript / Next.js build artifacts
 tsconfig.tsbuildinfo
 next-env.d.ts
+
+# Private data for our company
+data-internal.txt
