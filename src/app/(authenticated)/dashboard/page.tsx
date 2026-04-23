@@ -1,7 +1,11 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import prisma from "@/lib/prisma";
+import dbConnect from "@/lib/mongoose";
+import Tournament from "@/models/tournament";
+import Team from "@/models/team";
+import User from "@/models/user";
+import QuickGame from "@/models/quick-game";
 import { buttonVariants } from "@/components/ui/button";
 import { Users, Plus, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,55 +17,65 @@ export default async function DashboardPage() {
   if (!session?.user?.id) redirect("/login");
 
   const userId = session.user.id;
+  await dbConnect();
 
   // Tournaments where the user is a team member
-  const myTeams = await prisma.userTeam.findMany({
-    where: { userId },
-    select: { team: { select: { tournamentId: true } } },
-  });
-  const myJoinedTournamentIds = myTeams.map((ut) => ut.team.tournamentId);
+  const myTeams = await Team.find({ userIds: userId }).lean();
+  const myJoinedTournamentIds = myTeams.map((t) => t.tournamentId.toString());
 
-  const myTournaments = await prisma.tournament.findMany({
-    where: {
-      OR: [
-        { organizerUserId: userId },
-        { id: { in: myJoinedTournamentIds } },
-      ],
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const myTournamentsRaw = await Tournament.find({
+    $or: [
+      { organizerUserId: userId },
+      { _id: { $in: myJoinedTournamentIds } },
+    ],
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const myTournaments = myTournamentsRaw.map((t) => ({
+    id: t._id.toString(),
+    name: t.name,
+    mode: t.mode,
+    status: t.status,
+    isPublic: t.isPublic,
+    joinCode: t.joinCode,
+    organizerUserId: t.organizerUserId.toString(),
+    createdAt: t.createdAt,
+  }));
 
   const myTournamentIds = myTournaments.map((t) => t.id);
 
-  const openTournaments = await prisma.tournament.findMany({
-    where: {
-      status: "open",
-      isPublic: true,
-      id: { notIn: myTournamentIds },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const openTournamentsRaw = await Tournament.find({
+    status: "open",
+    isPublic: true,
+    _id: { $nin: myTournamentIds },
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const openTournaments = openTournamentsRaw.map((t) => ({
+    id: t._id.toString(),
+    name: t.name,
+    mode: t.mode,
+    status: t.status,
+    isPublic: t.isPublic,
+    joinCode: t.joinCode,
+    organizerUserId: t.organizerUserId.toString(),
+    createdAt: t.createdAt,
+  }));
 
   const allIds = [...myTournamentIds, ...openTournaments.map((t) => t.id)];
 
   // Count full teams and total players per tournament
-  const teams = await prisma.team.findMany({
-    where: { tournamentId: { in: allIds } },
-    select: {
-      tournamentId: true,
-      status: true,
-      _count: { select: { users: true } },
-    },
-  });
-
+  const allTeams = await Team.find({ tournamentId: { $in: allIds } }).lean();
   const countMap: Record<string, number> = {};
   const playerMap: Record<string, number> = {};
-  for (const team of teams) {
+  for (const team of allTeams) {
+    const tid = team.tournamentId.toString();
     if (team.status === "full") {
-      countMap[team.tournamentId] = (countMap[team.tournamentId] ?? 0) + 1;
+      countMap[tid] = (countMap[tid] ?? 0) + 1;
     }
-    playerMap[team.tournamentId] =
-      (playerMap[team.tournamentId] ?? 0) + team._count.users;
+    playerMap[tid] = (playerMap[tid] ?? 0) + team.userIds.length;
   }
 
   // Organizer display names
@@ -69,38 +83,50 @@ export default async function DashboardPage() {
   const organizerIds = [
     ...new Set(allTournaments.map((t) => t.organizerUserId)),
   ];
-  const organizers = await prisma.user.findMany({
-    where: { id: { in: organizerIds } },
-    select: { id: true, displayName: true, email: true },
-  });
+  const organizers = await User.find({ _id: { $in: organizerIds } }).lean();
   const organizerMap: Record<string, string> = Object.fromEntries(
-    organizers.map((u) => [u.id, u.displayName || u.email.split("@")[0]])
+    organizers.map((u) => [
+      u._id.toString(),
+      u.displayName || u.email.split("@")[0],
+    ])
   );
 
   // Quick games (waiting or active)
-  const rawQuickGames = await prisma.quickGame.findMany({
-    where: {
-      OR: [{ creatorId: userId }, { opponentId: userId }],
-      status: { in: ["waiting", "active"] },
-    },
-    include: {
-      creator: { select: { id: true, displayName: true, email: true } },
-      opponent: { select: { id: true, displayName: true, email: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const rawQuickGames = await QuickGame.find({
+    $or: [{ creatorId: userId }, { opponentId: userId }],
+    status: { $in: ["waiting", "active"] },
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const qgUserIds = [
+    ...new Set(
+      rawQuickGames.flatMap((g) =>
+        [g.creatorId.toString(), g.opponentId?.toString()].filter(
+          Boolean
+        ) as string[]
+      )
+    ),
+  ];
+  const qgUsers = await User.find({ _id: { $in: qgUserIds } }).lean();
+  const qgUserMap = Object.fromEntries(
+    qgUsers.map((u) => [
+      u._id.toString(),
+      u.displayName || u.email.split("@")[0],
+    ])
+  );
 
   const quickGames: QuickGameData[] = rawQuickGames.map((g) => ({
-    id: g.id,
+    id: g._id.toString(),
     joinCode: g.joinCode,
     status: g.status,
-    creatorId: g.creatorId,
-    creatorName: g.creator.displayName || g.creator.email.split("@")[0],
-    opponentId: g.opponentId,
-    opponentName: g.opponent
-      ? g.opponent.displayName || g.opponent.email.split("@")[0]
+    creatorId: g.creatorId.toString(),
+    creatorName: qgUserMap[g.creatorId.toString()] ?? "Unknown",
+    opponentId: g.opponentId?.toString() ?? null,
+    opponentName: g.opponentId
+      ? (qgUserMap[g.opponentId.toString()] ?? "Unknown")
       : null,
-    winnerId: g.winnerId,
+    winnerId: g.winnerId?.toString() ?? null,
   }));
 
   return (

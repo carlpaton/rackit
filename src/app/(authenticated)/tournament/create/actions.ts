@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import prisma from "@/lib/prisma";
+import dbConnect from "@/lib/mongoose";
+import Tournament from "@/models/tournament";
 
 export type CreateTournamentState = { error?: string } | null;
 
@@ -14,7 +15,7 @@ async function generateJoinCode(): Promise<string> {
       for (let i = 0; i < len; i++) {
         code += chars[Math.floor(Math.random() * chars.length)];
       }
-      const existing = await prisma.tournament.findUnique({ where: { joinCode: code } });
+      const existing = await Tournament.findOne({ joinCode: code });
       if (!existing) return code;
     }
   }
@@ -38,16 +39,15 @@ export async function createTournament(
   }
 
   const isPublic = visibility !== "private";
+  await dbConnect();
   const joinCode = await generateJoinCode();
 
-  await prisma.tournament.create({
-    data: {
-      name,
-      mode,
-      isPublic,
-      joinCode,
-      organizerUserId: session.user.id,
-    },
+  await Tournament.create({
+    name,
+    mode,
+    isPublic,
+    joinCode,
+    organizerUserId: session.user.id,
   });
 
   redirect(`/dashboard`);

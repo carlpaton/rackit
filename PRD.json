@@ -290,5 +290,50 @@
       "steps": [],
       "dependsOn": ["PRD-019"]
     }
+  ,
+    {
+      "id": "PRD-034",
+      "status": "done",
+      "heading": "Set up MongoDB Atlas with Mongoose",
+      "description": "Replace the Prisma/Supabase PostgreSQL infrastructure with MongoDB Atlas and Mongoose. This is the inverse of PRD-025. Steps: (1) Install mongoose, mongodb, @auth/mongodb-adapter; uninstall @prisma/adapter-pg, @prisma/client, @types/pg, pg, prisma, @auth/prisma-adapter. (2) Create src/lib/mongoose.ts — a connection singleton that caches the connection on the global object to survive Next.js hot-reloads, using MONGODB_URI. (3) Define Mongoose models for all 6 app collections using idiomatic MongoDB embedding for bounded relationships: User (email unique, passwordHash, displayName, createdAt); Tournament (name, mode, status, path, isPublic, joinCode unique, organizerUserId ref, winnerTeamId ref, createdAt); Team (tournamentId ref, status, name, userIds ObjectId[] — replaces UserTeam join table, createdAt); Group (tournamentId ref, name, teamIds ObjectId[] — replaces GroupTeam join table, createdAt); Match (tournamentId ref, groupId ref, teamAId ref, teamBId ref, winnerId ref, phase, round, bracketOrder, delegatedTeamIds ObjectId[] — replaces MatchDelegation join table, createdAt); QuickGame (joinCode unique, creatorId ref, opponentId ref, winnerId ref, status, createdAt). (4) Update src/auth.ts to use MongoDBAdapter from @auth/mongodb-adapter — the adapter manages its own accounts/sessions/verificationTokens collections automatically. (5) Update .env.example: remove DATABASE_URL and DIRECT_URL, add MONGODB_URI with a placeholder mongodb+srv:// connection string and explanatory comment. (6) Update the Vercel build command in package.json: remove 'prisma generate && prisma migrate deploy &&' prefix — Mongoose needs no migration step. (7) Delete prisma/ directory and prisma.config.ts. (8) Update CLAUDE.md to reflect the reverted stack: Mongoose ORM, MongoDB Atlas, MONGODB_URI env var, and note that schema changes require creating/updating Mongoose model files (no migration CLI). Acceptance criteria: npm install succeeds with no Prisma packages; app boots locally with MONGODB_URI in .env.local; NextAuth session is stored in MongoDB via the adapter; all Mongoose models are importable; no Prisma imports remain in lib/ or auth.ts; CLAUDE.md documents the Mongoose workflow.",
+      "steps": [
+        "Uninstall Prisma packages: @prisma/adapter-pg, @prisma/client, @types/pg, pg, prisma, @auth/prisma-adapter",
+        "Install MongoDB packages: mongoose, mongodb, @auth/mongodb-adapter",
+        "Create src/lib/mongoose.ts — connection singleton caching on global to survive hot-reload",
+        "Create src/models/user.ts — User Mongoose model (email unique, passwordHash, displayName, createdAt)",
+        "Create src/models/tournament.ts — Tournament model (mode/status/path enums, isPublic, joinCode unique, organizerUserId, winnerTeamId)",
+        "Create src/models/team.ts — Team model with embedded userIds ObjectId[] (replaces UserTeam join table)",
+        "Create src/models/group.ts — Group model with embedded teamIds ObjectId[] (replaces GroupTeam join table)",
+        "Create src/models/match.ts — Match model with embedded delegatedTeamIds ObjectId[] (replaces MatchDelegation join table)",
+        "Create src/models/quick-game.ts — QuickGame model (joinCode unique, creatorId, opponentId, winnerId, status)",
+        "Update src/auth.ts — swap PrismaAdapter for MongoDBAdapter, update imports, keep all JWT/session callbacks",
+        "Update .env.example — remove DATABASE_URL/DIRECT_URL, add MONGODB_URI with comment",
+        "Update package.json build script — remove 'prisma generate && prisma migrate deploy &&'",
+        "Delete prisma/ directory and prisma.config.ts",
+        "Update CLAUDE.md — reflect Mongoose/MongoDB stack, MONGODB_URI env var, no migration CLI"
+      ],
+      "dependsOn": ["PRD-025"]
+    },
+    {
+      "id": "PRD-035",
+      "status": "done",
+      "heading": "Replace Prisma queries with Mongoose across codebase",
+      "description": "Remove all Prisma Client usage and rewrite every database query in server actions and page components using Mongoose. This is the inverse of PRD-026, building on the models defined in PRD-034. Files to migrate: src/app/register/actions.ts, src/app/login/actions.ts, src/auth.ts Credentials provider, src/app/(authenticated)/dashboard/actions.ts, src/app/(authenticated)/tournament/create/actions.ts, src/app/(authenticated)/tournament/[id]/actions.ts, src/app/(authenticated)/tournament/[id]/join/actions.ts, src/app/(authenticated)/quick-game/actions.ts, and all page.tsx components that call prisma directly. Key translation patterns: prisma.model.findUnique() → Model.findOne(); prisma.model.findMany() → Model.find(); prisma.model.create() → new Model(data).save() or Model.create(); prisma.model.update() → Model.findByIdAndUpdate(); prisma.model.delete() → Model.findByIdAndDelete(); prisma.$transaction() → sequential Mongoose operations (MongoDB transactions via sessions are available for atomicity where needed, e.g. joining a half-team). Because join tables are now embedded arrays, include/select with relation traversal becomes a populate() call or an in-memory lookup after fetching related documents separately. The _count: { select: { users: true } } pattern becomes team.userIds.length in JavaScript after hydration. Unique constraint violations in Mongoose are caught as errors with code 11000. Acceptance criteria: no Prisma or @prisma imports remain anywhere in src/; all existing features work identically (tournament CRUD, join/leave, group stage, knockout bracket, result recording, delegation, quick games, rankings); mongoose studio (or direct Compass inspection) shows all data correctly structured; no runtime errors from field name mismatches between old Prisma schema and new Mongoose models.",
+      "steps": [],
+      "dependsOn": ["PRD-034"]
+    },
+    {
+      "id": "PRD-036",
+      "status": "done",
+      "heading": "Migrate dev scripts from Prisma to Mongoose",
+      "description": "Rewrite the three scripts in the scripts/ directory to use MongoDB via Mongoose instead of Prisma/PostgreSQL. All three currently import PrismaClient and PrismaPg, read DATABASE_URL, and use Prisma query patterns. They must be updated to use MONGODB_URI from .env.local and connect directly with mongoose.connect() (plain Node.js — cannot use the Next.js src/lib/mongoose.ts singleton). The scripts require('mongoose') and define inline schemas sufficient for the operations they perform — no need to replicate the full model files. The three files: (1) reset-db.js — remove the Prisma join-table deletions (MatchDelegation, GroupTeam, UserTeam no longer exist as separate collections). Instead delete all documents from: users, tournaments, teams, groups, matches, quickgames, and the NextAuth adapter collections (accounts, sessions, verificationtokens). Use mongoose.connection.db.collection(name).deleteMany({}) for each collection after connecting. (2) seed-users.js — swap DATABASE_URL guard for MONGODB_URI; connect with mongoose; check existence with a findOne on email; create via User-equivalent document with email, displayName, passwordHash fields; catch duplicate-key error (code 11000) for the skip-existing logic instead of findUnique. (3) seed-tournament.js — swap DATABASE_URL guard for MONGODB_URI; connect with mongoose; resolve emails to ObjectIds via find(); create Tournament document with organizerUserId as ObjectId and a generated joinCode; create Team documents with userIds: [ObjectId, ObjectId] embedded array (no join table) and the optional name field; status is 'full' when two members, 'open' when one. The data.txt parsing format is unchanged. No other changes to argument handling or console output. Acceptance criteria: node scripts/reset-db.js clears all six app collections plus the three NextAuth collections and logs a count per collection; node scripts/seed-users.js creates users from data.txt using MONGODB_URI; node scripts/seed-tournament.js creates a tournament and teams with embedded userIds using MONGODB_URI; no Prisma or DATABASE_URL references remain in any script file.",
+      "steps": [
+        "Update reset-db.js: replace DATABASE_URL check with MONGODB_URI, connect via mongoose.connect(), delete all documents from users/tournaments/teams/groups/matches/quickgames/accounts/sessions/verificationtokens collections, log count per collection, disconnect",
+        "Update seed-users.js: replace DATABASE_URL check with MONGODB_URI, connect via mongoose.connect(), define minimal User schema (email unique, passwordHash, displayName), replace prisma.user.findUnique with findOne, replace prisma.user.create with User.create(), catch error code 11000 for skip-existing logic, disconnect",
+        "Update seed-tournament.js: replace DATABASE_URL check with MONGODB_URI, connect via mongoose.connect(), define minimal Tournament and Team schemas matching src/models/, resolve emails to ObjectIds with find(), create Tournament with organizerUserId as ObjectId, create Teams with embedded userIds array instead of join table, disconnect",
+        "Verify: run all three scripts against a local MONGODB_URI and confirm expected output"
+      ],
+      "dependsOn": ["PRD-035"]
+    }
   ]
 }

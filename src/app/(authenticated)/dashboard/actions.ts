@@ -1,7 +1,10 @@
 "use server";
 
 import { auth } from "@/auth";
-import prisma from "@/lib/prisma";
+import dbConnect from "@/lib/mongoose";
+import Tournament from "@/models/tournament";
+import Team from "@/models/team";
+import User from "@/models/user";
 
 export type TournamentSearchResult =
   | { error: string }
@@ -21,34 +24,38 @@ export async function findTournamentByCode(
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated." };
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { joinCode: code.toLowerCase().trim() },
-    include: { organizer: { select: { displayName: true, email: true } } },
-  });
+  await dbConnect();
+  const tournament = await Tournament.findOne({
+    joinCode: code.toLowerCase().trim(),
+  }).lean();
 
   if (!tournament) return { error: "Invalid code." };
   if (tournament.status === "complete") return { error: "This tournament has ended." };
 
   const userId = session.user.id;
-  const isOrganizer = tournament.organizerUserId === userId;
+  const isOrganizer = tournament.organizerUserId.toString() === userId;
 
-  const myTeam = await prisma.userTeam.findFirst({
-    where: { userId, team: { tournamentId: tournament.id } },
-  });
+  const myTeam = await Team.findOne({
+    tournamentId: tournament._id,
+    userIds: userId,
+  }).lean();
 
   if (isOrganizer || myTeam) {
     return { error: "You are already in this tournament." };
   }
 
+  const organizer = await User.findById(tournament.organizerUserId).lean();
+  const organizerName = organizer
+    ? organizer.displayName || organizer.email.split("@")[0]
+    : "Unknown";
+
   return {
     tournament: {
-      id: tournament.id,
+      id: tournament._id.toString(),
       name: tournament.name,
       mode: tournament.mode,
       status: tournament.status,
-      organizerName:
-        tournament.organizer.displayName ||
-        tournament.organizer.email.split("@")[0],
+      organizerName,
     },
   };
 }

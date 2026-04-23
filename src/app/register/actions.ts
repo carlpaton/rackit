@@ -3,7 +3,8 @@
 import bcrypt from "bcryptjs";
 import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
-import prisma from "@/lib/prisma";
+import dbConnect from "@/lib/mongoose";
+import User from "@/models/user";
 
 export type RegisterState = { error?: string } | null;
 
@@ -25,10 +26,9 @@ export async function register(
 
   try {
     const passwordHash = await bcrypt.hash(password, 12);
-    await prisma.user.create({ data: { email, passwordHash, displayName } });
+    await dbConnect();
+    await User.create({ email, passwordHash, displayName });
   } catch {
-    // Unique constraint violation or any other DB error —
-    // return a generic message that doesn't reveal whether the email exists
     return { error: "Registration failed — please try again." };
   }
 

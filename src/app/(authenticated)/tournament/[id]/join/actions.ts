@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import prisma from "@/lib/prisma";
+import dbConnect from "@/lib/mongoose";
+import Tournament from "@/models/tournament";
+import Team from "@/models/team";
 
 async function getContext(tournamentId: string) {
   const session = await auth();
@@ -10,14 +12,14 @@ async function getContext(tournamentId: string) {
 
   const userId = session.user.id;
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: tournamentId },
-  });
+  await dbConnect();
+  const tournament = await Tournament.findById(tournamentId).lean();
   if (!tournament || tournament.status !== "open") redirect("/dashboard");
 
-  const existing = await prisma.userTeam.findFirst({
-    where: { userId, team: { tournamentId } },
-  });
+  const existing = await Team.findOne({
+    tournamentId,
+    userIds: userId,
+  }).lean();
   if (existing) redirect("/dashboard");
 
   return { userId };
@@ -28,12 +30,10 @@ export async function joinSingles(
   _formData: FormData
 ): Promise<void> {
   const { userId } = await getContext(tournamentId);
-  await prisma.team.create({
-    data: {
-      tournamentId,
-      status: "full",
-      users: { create: { userId } },
-    },
+  await Team.create({
+    tournamentId,
+    status: "full",
+    userIds: [userId],
   });
   redirect(`/tournament/${tournamentId}`);
 }
@@ -45,18 +45,12 @@ export async function joinHalfTeam(
 ): Promise<void> {
   const { userId } = await getContext(tournamentId);
 
-  try {
-    await prisma.$transaction(async (tx) => {
-      const result = await tx.team.updateMany({
-        where: { id: teamId, tournamentId, status: "open" },
-        data: { status: "full" },
-      });
-      if (result.count === 0) throw new Error("team_not_found");
-      await tx.userTeam.create({ data: { userId, teamId } });
-    });
-  } catch {
-    redirect(`/tournament/${tournamentId}/join`);
-  }
+  const result = await Team.findOneAndUpdate(
+    { _id: teamId, tournamentId, status: "open" },
+    { $push: { userIds: userId }, $set: { status: "full" } },
+    { new: true }
+  );
+  if (!result) redirect(`/tournament/${tournamentId}/join`);
 
   redirect(`/tournament/${tournamentId}`);
 }
@@ -72,13 +66,11 @@ export async function startHalfTeam(
       ? rawName.trim().slice(0, 50)
       : null;
 
-  await prisma.team.create({
-    data: {
-      tournamentId,
-      status: "open",
-      ...(name ? { name } : {}),
-      users: { create: { userId } },
-    },
+  await Team.create({
+    tournamentId,
+    status: "open",
+    ...(name ? { name } : {}),
+    userIds: [userId],
   });
   redirect(`/tournament/${tournamentId}`);
 }

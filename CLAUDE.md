@@ -71,41 +71,51 @@ GitHub: https://github.com/carlpaton/rackit
 |---|---|
 | Framework | Next.js 16 (App Router, Turbopack) |
 | Frontend | React 19.2 |
-| Database | Supabase PostgreSQL (via Prisma ORM) |
-| Auth | NextAuth.js v5 (Auth.js) — Credentials provider + Prisma adapter |
+| Database | MongoDB Atlas (via Mongoose ODM) |
+| Auth | NextAuth.js v5 (Auth.js) — Credentials provider + MongoDB adapter |
 | Hosting | Vercel |
 
-> **Prisma** is the ORM used to interact with the Supabase PostgreSQL database. The schema is defined in `prisma/schema.prisma`. Connection is configured via `prisma.config.ts` (uses `DIRECT_URL` for migrations) and `src/lib/prisma.ts` (uses `DATABASE_URL` pooled connection at runtime via `@prisma/adapter-pg`).
+> **Mongoose** is the ODM used to interact with MongoDB Atlas. Models are defined in `src/models/`. The connection singleton lives in `src/lib/mongoose.ts` — call `await dbConnect()` at the start of every server action and page data-fetch before using any model. The native MongoClient (for the NextAuth adapter) lives in `src/lib/mongodb.ts`.
 
 ### Key Conventions
 - Use the **App Router** (`src/app/` directory), not Pages Router
 - `proxy.ts` is used instead of `middleware.ts` (Next.js 16 convention)
-- The Prisma client singleton lives in `src/lib/prisma.ts` — import it everywhere as `import prisma from "@/lib/prisma"`
+- Always call `await dbConnect()` before using Mongoose models in server actions and page components
 - Auth session data is available via NextAuth.js `auth()` helper in server components and `useSession()` in client components
 - Route protection is handled at the `proxy.ts` level, not per-page
+- MongoDB IDs are ObjectId internally; call `.toString()` when you need a string for comparisons or JSX keys
 
-### Prisma Workflow
-- **Add a new field/model**: edit `prisma/schema.prisma`, then run `npx prisma migrate dev --name <description>` locally
-- **Apply migrations in production**: the `build` script runs `prisma generate && prisma migrate deploy && next build` automatically on Vercel
-- **Inspect data**: run `npx prisma studio` locally (requires `DIRECT_URL` set in `.env.local`)
-- **Regenerate client after schema changes**: `npx prisma generate`
+### Mongoose Models
+All models live in `src/models/`:
+- `user.ts` — User (email unique, passwordHash, displayName, plus NextAuth fields)
+- `tournament.ts` — Tournament (name, mode, status, path, isPublic, joinCode unique, organizerUserId, winnerTeamId)
+- `team.ts` — Team with embedded `userIds: ObjectId[]` (replaces UserTeam join table)
+- `group.ts` — Group with embedded `teamIds: ObjectId[]` (replaces GroupTeam join table)
+- `match.ts` — Match with embedded `delegatedTeamIds: ObjectId[]` (replaces MatchDelegation join table)
+- `quick-game.ts` — QuickGame (joinCode unique, creatorId, opponentId, winnerId, status)
+
+### Schema Change Workflow
+- **Add a field**: edit the Mongoose model file in `src/models/` — no migration needed for MongoDB
+- **New model**: create a new file in `src/models/` following the existing pattern (`mongoose.models.X ?? mongoose.model('X', schema)`)
+- **Inspect data**: connect MongoDB Compass to `MONGODB_URI`
 
 ### Environment Variables
-- `DATABASE_URL` — pooled Supabase connection string (Transaction pooler, port 6543), used at application runtime
-- `DIRECT_URL` — direct Supabase connection string (port 5432), used by Prisma CLI for migrations
+- `MONGODB_URI` — MongoDB Atlas connection string (`mongodb+srv://...`), used at application runtime
 - `NEXTAUTH_SECRET` — random string; generate with `openssl rand -base64 32`
 - `NEXTAUTH_URL` — canonical app URL (`http://localhost:3000` for local dev)
 
-### Prisma Enum Values
-The Prisma schema uses `@map` for enum values that contain hyphens. The **Prisma-side identifiers** (used in code) differ from the **database-stored values**:
+### Status Values (stored as-is in MongoDB)
+Unlike Prisma's mapped enums, Mongoose stores the exact string values used in code:
 
-| Prisma code value | Stored in DB |
+| Field | Values |
 |---|---|
-| `TournamentStatus.in_progress` | `"in-progress"` |
-| `TournamentPath.group_stage` | `"group-stage"` |
-| `TournamentPath.direct_knockout` | `"direct-knockout"` |
-
-Always use the Prisma-side identifiers in code (e.g. `tournament.status === "in_progress"`).
+| `tournament.status` | `"open"`, `"in_progress"`, `"complete"` |
+| `tournament.path` | `"group_stage"`, `"direct_knockout"` |
+| `tournament.mode` | `"singles"`, `"doubles"` |
+| `team.status` | `"open"`, `"full"` |
+| `match.phase` | `"group"`, `"knockout"` |
+| `match.round` | `"QF"`, `"SF"`, `"Final"` |
+| `quickGame.status` | `"waiting"`, `"active"`, `"complete"` |
 
 ---
 

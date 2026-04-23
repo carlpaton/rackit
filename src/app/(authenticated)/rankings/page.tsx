@@ -1,6 +1,11 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
+import dbConnect from "@/lib/mongoose";
+import Tournament from "@/models/tournament";
+import Team from "@/models/team";
+import Match from "@/models/match";
+import QuickGame from "@/models/quick-game";
+import User from "@/models/user";
 import { Trophy } from "lucide-react";
 
 export default async function RankingsPage() {
@@ -8,27 +13,35 @@ export default async function RankingsPage() {
   if (!session?.user?.id) redirect("/login");
 
   const userId = session.user.id;
+  await dbConnect();
 
   // ── Personal stats ────────────────────────────────────────────────────────
 
-  // Tournament history: complete tournaments where user was a team member
-  const myUserTeams = await prisma.userTeam.findMany({
-    where: {
-      userId,
-      team: { tournament: { status: "complete" } },
-    },
-    include: {
-      team: {
-        include: {
-          tournament: {
-            include: {
-              matches: { where: { phase: "knockout" } },
-            },
-          },
-        },
-      },
-    },
-  });
+  // Find teams this user is in
+  const myTeams = await Team.find({ userIds: userId }).lean();
+  const myTeamIds = myTeams.map((t) => t._id.toString());
+  const myTournamentIds = [...new Set(myTeams.map((t) => t.tournamentId.toString()))];
+
+  // Complete tournaments the user participated in
+  const myCompleteTournaments = await Tournament.find({
+    _id: { $in: myTournamentIds },
+    status: "complete",
+  }).lean();
+
+  const myCompleteIds = myCompleteTournaments.map((t) => t._id.toString());
+
+  // Knockout matches for those tournaments
+  const myKnockoutMatches = await Match.find({
+    tournamentId: { $in: myCompleteIds },
+    phase: "knockout",
+  }).lean();
+
+  const matchesByTournament: Record<string, typeof myKnockoutMatches> = {};
+  for (const m of myKnockoutMatches) {
+    const tid = m.tournamentId.toString();
+    if (!matchesByTournament[tid]) matchesByTournament[tid] = [];
+    matchesByTournament[tid].push(m);
+  }
 
   type TournamentEntry = {
     id: string;
@@ -37,75 +50,118 @@ export default async function RankingsPage() {
     points: number;
   };
 
-  const myTournamentHistory: TournamentEntry[] = myUserTeams.map(({ team }) => {
-    const { tournament } = team;
-    const teamId = team.id;
-    const position = getFinishingPosition(teamId, tournament);
-    return {
-      id: tournament.id,
-      name: tournament.name,
-      position: position.label,
-      points: position.points,
-    };
+  const myTournamentHistory: TournamentEntry[] = myTeams.flatMap((team) => {
+    const teamId = team._id.toString();
+    const tournament = myCompleteTournaments.find(
+      (t) => t._id.toString() === team.tournamentId.toString()
+    );
+    if (!tournament) return [];
+
+    const knockouts = (matchesByTournament[tournament._id.toString()] ?? []).map(
+      (m) => ({
+        teamAId: m.teamAId?.toString() ?? null,
+        teamBId: m.teamBId?.toString() ?? null,
+        winnerId: m.winnerId?.toString() ?? null,
+        round: m.round ?? null,
+      })
+    );
+
+    const position = getFinishingPosition(teamId, {
+      winnerTeamId: tournament.winnerTeamId?.toString() ?? null,
+      matches: knockouts,
+    });
+
+    return [
+      {
+        id: tournament._id.toString(),
+        name: tournament.name,
+        position: position.label,
+        points: position.points,
+      },
+    ];
   });
 
   // Quick game record
-  const myQuickGames = await prisma.quickGame.findMany({
-    where: {
-      OR: [{ creatorId: userId }, { opponentId: userId }],
-      status: "complete",
-    },
-  });
-  const myQGWins = myQuickGames.filter((g) => g.winnerId === userId).length;
+  const myQuickGames = await QuickGame.find({
+    $or: [{ creatorId: userId }, { opponentId: userId }],
+    status: "complete",
+  }).lean();
+  const myQGWins = myQuickGames.filter(
+    (g) => g.winnerId?.toString() === userId
+  ).length;
   const myQGLosses = myQuickGames.length - myQGWins;
 
   // ── Global leaderboard ────────────────────────────────────────────────────
 
   // Tournament points leaderboard
-  const completeTournaments = await prisma.tournament.findMany({
-    where: { status: "complete" },
-    include: {
-      teams: {
-        include: { users: { select: { userId: true } } },
-      },
-      matches: { where: { phase: "knockout" } },
-    },
-  });
+  const completeTournaments = await Tournament.find({ status: "complete" }).lean();
+  const completeIds = completeTournaments.map((t) => t._id.toString());
+
+  const allTeams = await Team.find({ tournamentId: { $in: completeIds } }).lean();
+  const allKnockouts = await Match.find({
+    tournamentId: { $in: completeIds },
+    phase: "knockout",
+  }).lean();
+
+  const teamsByTournament: Record<string, typeof allTeams> = {};
+  for (const t of allTeams) {
+    const tid = t.tournamentId.toString();
+    if (!teamsByTournament[tid]) teamsByTournament[tid] = [];
+    teamsByTournament[tid].push(t);
+  }
+
+  const knockoutsByTournament: Record<string, typeof allKnockouts> = {};
+  for (const m of allKnockouts) {
+    const tid = m.tournamentId.toString();
+    if (!knockoutsByTournament[tid]) knockoutsByTournament[tid] = [];
+    knockoutsByTournament[tid].push(m);
+  }
 
   const userPointsMap: Record<string, number> = {};
 
   for (const tournament of completeTournaments) {
-    for (const team of tournament.teams) {
-      const { points } = getFinishingPosition(team.id, tournament);
-      for (const { userId: uid } of team.users) {
-        userPointsMap[uid] = (userPointsMap[uid] ?? 0) + points;
+    const tid = tournament._id.toString();
+    const teams = teamsByTournament[tid] ?? [];
+    const knockouts = (knockoutsByTournament[tid] ?? []).map((m) => ({
+      teamAId: m.teamAId?.toString() ?? null,
+      teamBId: m.teamBId?.toString() ?? null,
+      winnerId: m.winnerId?.toString() ?? null,
+      round: m.round ?? null,
+    }));
+
+    for (const team of teams) {
+      const { points } = getFinishingPosition(team._id.toString(), {
+        winnerTeamId: tournament.winnerTeamId?.toString() ?? null,
+        matches: knockouts,
+      });
+      for (const uid of team.userIds) {
+        const uidStr = uid.toString();
+        userPointsMap[uidStr] = (userPointsMap[uidStr] ?? 0) + points;
       }
     }
   }
 
-  // Quick game wins leaderboard
-  const qgWinsRaw = await prisma.quickGame.groupBy({
-    by: ["winnerId"],
-    where: { status: "complete", winnerId: { not: null } },
-    _count: { winnerId: true },
-    orderBy: { _count: { winnerId: "desc" } },
-  });
+  // Quick game wins leaderboard via aggregate
+  const qgWinsRaw = await QuickGame.aggregate<{ _id: string; count: number }>([
+    { $match: { status: "complete", winnerId: { $ne: null } } },
+    { $group: { _id: "$winnerId", count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+  ]);
 
   // Collect all user IDs needed for display names
   const leaderboardUserIds = [
     ...new Set([
       ...Object.keys(userPointsMap),
-      ...qgWinsRaw.map((r) => r.winnerId!),
+      ...qgWinsRaw.map((r) => r._id.toString()),
     ]),
   ];
 
-  const leaderboardUsers = await prisma.user.findMany({
-    where: { id: { in: leaderboardUserIds } },
-    select: { id: true, displayName: true, email: true },
-  });
+  const leaderboardUsers = await User.find({
+    _id: { $in: leaderboardUserIds },
+  }).lean();
   const nameMap = Object.fromEntries(
     leaderboardUsers.map((u) => [
-      u.id,
+      u._id.toString(),
       u.displayName || u.email.split("@")[0],
     ])
   );
@@ -117,13 +173,11 @@ export default async function RankingsPage() {
     .map(([uid, pts]) => ({ userId: uid, name: nameMap[uid] ?? uid, points: pts }));
 
   // Quick game wins leaderboard
-  const qgLeaderboard = qgWinsRaw
-    .filter((r) => r.winnerId)
-    .map((r) => ({
-      userId: r.winnerId!,
-      name: nameMap[r.winnerId!] ?? r.winnerId!,
-      wins: r._count.winnerId,
-    }));
+  const qgLeaderboard = qgWinsRaw.map((r) => ({
+    userId: r._id.toString(),
+    name: nameMap[r._id.toString()] ?? r._id.toString(),
+    wins: r.count,
+  }));
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-10">
@@ -302,7 +356,12 @@ export default async function RankingsPage() {
 
 type TournamentWithMatches = {
   winnerTeamId: string | null;
-  matches: { teamAId: string; teamBId: string | null; winnerId: string | null; round: string | null }[];
+  matches: {
+    teamAId: string | null;
+    teamBId: string | null;
+    winnerId: string | null;
+    round: string | null;
+  }[];
 };
 
 function getFinishingPosition(

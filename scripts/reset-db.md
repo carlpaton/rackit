@@ -4,7 +4,7 @@ Wipes all app data from the database. Useful for clearing seeded test data befor
 
 ## Prerequisites
 
-- `.env.local` present with `DATABASE_URL` set
+- `.env.local` present with `MONGODB_URI` set
 
 ## Usage
 
@@ -14,18 +14,19 @@ node scripts/reset-db.js
 
 ## What gets deleted
 
-Tables are cleared in FK-safe order:
+All documents are removed from the following collections:
 
-| Table | Notes |
+| Collection | Notes |
 |---|---|
-| `MatchDelegation` | |
-| `Match` | |
-| `GroupTeam` | |
-| `Group` | |
-| `UserTeam` | |
-| `Team` | `Tournament.winnerTeamId` is nulled first to break the circular FK |
-| `Tournament` | |
-| `User` | Cascades to `Account` and `Session` |
+| `users` | |
+| `tournaments` | |
+| `teams` | |
+| `groups` | |
+| `matches` | |
+| `quickgames` | |
+| `accounts` | NextAuth adapter collection |
+| `sessions` | NextAuth adapter collection |
+| `verificationtokens` | NextAuth adapter collection |
 
 ## After running
 
