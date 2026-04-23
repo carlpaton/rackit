@@ -2,7 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import prisma from "@/lib/prisma";
+import dbConnect from "@/lib/mongoose";
+import Tournament from "@/models/tournament";
+import Team from "@/models/team";
+import Group from "@/models/group";
+import Match from "@/models/match";
 
 export async function leaveTournament(
   tournamentId: string,
@@ -13,29 +17,20 @@ export async function leaveTournament(
 
   const userId = session.user.id;
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: tournamentId },
-  });
+  await dbConnect();
+  const tournament = await Tournament.findById(tournamentId).lean();
   if (!tournament || tournament.status !== "open") redirect("/dashboard");
 
-  const userTeam = await prisma.userTeam.findFirst({
-    where: { userId, team: { tournamentId } },
-    include: { team: { include: { users: true } } },
-  });
-  if (!userTeam) redirect("/dashboard");
+  const team = await Team.findOne({ tournamentId, userIds: userId }).lean();
+  if (!team) redirect("/dashboard");
 
-  const team = userTeam.team;
-
-  if (team.status === "full" && team.users.length === 2) {
-    await prisma.$transaction([
-      prisma.userTeam.delete({
-        where: { userId_teamId: { userId, teamId: team.id } },
-      }),
-      prisma.team.update({ where: { id: team.id }, data: { status: "open" } }),
-    ]);
+  if (team.status === "full" && team.userIds.length === 2) {
+    await Team.findByIdAndUpdate(team._id, {
+      $pull: { userIds: userId },
+      $set: { status: "open" },
+    });
   } else {
-    // Deletes the team; UserTeam rows cascade-delete
-    await prisma.team.delete({ where: { id: team.id } });
+    await Team.findByIdAndDelete(team._id);
   }
 
   redirect("/dashboard");
@@ -50,29 +45,28 @@ export async function startTournament(
 
   const userId = session.user.id;
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: tournamentId },
-  });
+  await dbConnect();
+  const tournament = await Tournament.findById(tournamentId).lean();
   if (!tournament) redirect("/dashboard");
-  if (tournament.organizerUserId !== userId) redirect("/dashboard");
+  if (tournament.organizerUserId.toString() !== userId) redirect("/dashboard");
   if (tournament.status !== "open") redirect("/dashboard");
 
-  const fullTeams = await prisma.team.findMany({
-    where: { tournamentId, status: "full" },
-  });
+  const fullTeams = await Team.find({ tournamentId, status: "full" }).lean();
   if (fullTeams.length < 2) redirect(`/tournament/${tournamentId}`);
 
   const path = fullTeams.length <= 4 ? "direct_knockout" : "group_stage";
 
-  await prisma.tournament.update({
-    where: { id: tournamentId },
-    data: { status: "in_progress", path },
+  await Tournament.findByIdAndUpdate(tournamentId, {
+    status: "in_progress",
+    path,
   });
 
+  const teamIds = fullTeams.map((t) => t._id.toString());
+
   if (path === "group_stage") {
-    await generateGroupStage(tournamentId, fullTeams.map((t) => t.id));
+    await generateGroupStage(tournamentId, teamIds);
   } else {
-    await generateKnockoutBracket(tournamentId, fullTeams.map((t) => t.id));
+    await generateKnockoutBracket(tournamentId, teamIds);
   }
 
   redirect(`/tournament/${tournamentId}`);
@@ -89,14 +83,10 @@ async function generateGroupStage(tournamentId: string, fullTeamIds: string[]) {
     const end = Math.floor(((g + 1) * n) / numGroups);
     const groupTeamIds = teamIds.slice(start, end);
 
-    const group = await prisma.group.create({
-      data: {
-        tournamentId,
-        name: `Group ${groupLetters[g]}`,
-        teams: {
-          create: groupTeamIds.map((teamId) => ({ teamId })),
-        },
-      },
+    const group = await Group.create({
+      tournamentId,
+      name: `Group ${groupLetters[g]}`,
+      teamIds: groupTeamIds,
     });
 
     const matchData = [];
@@ -104,15 +94,16 @@ async function generateGroupStage(tournamentId: string, fullTeamIds: string[]) {
       for (let j = i + 1; j < groupTeamIds.length; j++) {
         matchData.push({
           tournamentId,
-          groupId: group.id,
+          groupId: group._id,
           teamAId: groupTeamIds[i],
           teamBId: groupTeamIds[j],
           phase: "group" as const,
+          delegatedTeamIds: [],
         });
       }
     }
     if (matchData.length > 0) {
-      await prisma.match.createMany({ data: matchData });
+      await Match.insertMany(matchData);
     }
   }
 }
@@ -127,40 +118,40 @@ export async function recordResult(
 
   const userId = session.user.id;
 
-  const match = await prisma.match.findUnique({
-    where: { id: matchId },
-    include: { delegations: true },
-  });
+  await dbConnect();
+  const match = await Match.findById(matchId).lean();
   if (!match) redirect("/dashboard");
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: match.tournamentId },
-  });
+  const tournament = await Tournament.findById(match.tournamentId).lean();
   if (!tournament || tournament.status !== "in_progress") redirect("/dashboard");
 
-  const isOrganizer = tournament.organizerUserId === userId;
+  const isOrganizer = tournament.organizerUserId.toString() === userId;
   if (!isOrganizer) {
-    const userTeam = await prisma.userTeam.findFirst({
-      where: { userId, team: { tournamentId: match.tournamentId } },
-    });
+    const userTeam = await Team.findOne({
+      tournamentId: match.tournamentId,
+      userIds: userId,
+    }).lean();
     const isDelegated = userTeam
-      ? match.delegations.some((d) => d.teamId === userTeam.teamId)
+      ? match.delegatedTeamIds.some(
+          (id) => id.toString() === userTeam._id.toString()
+        )
       : false;
     if (!isDelegated) redirect(`/tournament/${match.tournamentId}`);
   }
 
   if (match.winnerId !== null) redirect(`/tournament/${match.tournamentId}`);
 
-  const validTeamIds = [match.teamAId, ...(match.teamBId ? [match.teamBId] : [])];
-  if (!validTeamIds.includes(winnerId)) redirect(`/tournament/${match.tournamentId}`);
+  const validTeamIds = [
+    match.teamAId?.toString(),
+    ...(match.teamBId ? [match.teamBId.toString()] : []),
+  ];
+  if (!validTeamIds.includes(winnerId))
+    redirect(`/tournament/${match.tournamentId}`);
 
-  await prisma.match.update({
-    where: { id: matchId },
-    data: { winnerId },
-  });
+  await Match.findByIdAndUpdate(matchId, { winnerId });
 
   if (match.phase === "knockout") {
-    await advanceKnockout(match.tournamentId, matchId, winnerId);
+    await advanceKnockout(match.tournamentId.toString(), matchId, winnerId);
   }
 
   redirect(`/tournament/${match.tournamentId}`);
@@ -171,10 +162,16 @@ async function advanceKnockout(
   completedMatchId: string,
   winnerId: string
 ) {
-  const allKnockout = await prisma.match.findMany({
-    where: { tournamentId, phase: "knockout" },
-    orderBy: [{ bracketOrder: "asc" }, { createdAt: "asc" }],
-  });
+  const rawMatches = await Match.find({ tournamentId, phase: "knockout" })
+    .sort({ bracketOrder: 1, createdAt: 1 })
+    .lean();
+
+  const allKnockout = rawMatches.map((m) => ({
+    id: m._id.toString(),
+    round: m.round ?? null,
+    winnerId: m.winnerId?.toString() ?? null,
+    bracketOrder: m.bracketOrder ?? null,
+  }));
 
   const rounds = ["QF", "SF", "Final"];
   const completedMatch = allKnockout.find((m) => m.id === completedMatchId);
@@ -183,9 +180,9 @@ async function advanceKnockout(
   const currentRoundIdx = rounds.indexOf(completedMatch.round ?? "");
   if (currentRoundIdx === -1 || currentRoundIdx === rounds.length - 1) {
     if (completedMatch.round === "Final") {
-      await prisma.tournament.update({
-        where: { id: tournamentId },
-        data: { status: "complete", winnerTeamId: winnerId },
+      await Tournament.findByIdAndUpdate(tournamentId, {
+        status: "complete",
+        winnerTeamId: winnerId,
       });
     }
     return;
@@ -212,19 +209,19 @@ async function advanceKnockout(
     const winnerA = getWinner(pair[0]);
     const winnerB = pair[1] ? getWinner(pair[1]) : null;
     const nextBracketOrder =
-      (currentRoundMatches
+      currentRoundMatches
         .filter((_, i) => i < pairIndex * 2)
-        .filter((_, i) => i % 2 === 0).length) +
-      (allKnockout.filter((m) => m.round === nextRound).length);
-    await prisma.match.create({
-      data: {
-        tournamentId,
-        teamAId: winnerA!,
-        teamBId: winnerB,
-        phase: "knockout",
-        round: nextRound,
-        bracketOrder: nextBracketOrder,
-      },
+        .filter((_, i) => i % 2 === 0).length +
+      allKnockout.filter((m) => m.round === nextRound).length;
+
+    await Match.create({
+      tournamentId,
+      teamAId: winnerA!,
+      teamBId: winnerB,
+      phase: "knockout",
+      round: nextRound,
+      bracketOrder: nextBracketOrder,
+      delegatedTeamIds: [],
     });
   }
 }
@@ -238,31 +235,31 @@ export async function advanceToKnockout(
 
   const userId = session.user.id;
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: tournamentId },
-  });
+  await dbConnect();
+  const tournament = await Tournament.findById(tournamentId).lean();
   if (!tournament) redirect("/dashboard");
-  if (tournament.organizerUserId !== userId) redirect("/dashboard");
+  if (tournament.organizerUserId.toString() !== userId) redirect("/dashboard");
   if (tournament.status !== "in_progress" || tournament.path !== "group_stage")
     redirect(`/tournament/${tournamentId}`);
 
-  const groupMatches = await prisma.match.findMany({
-    where: { tournamentId, phase: "group" },
-  });
+  const groupMatches = await Match.find({ tournamentId, phase: "group" }).lean();
   const allPlayed = groupMatches.every((m) => m.winnerId !== null);
   if (!allPlayed) redirect(`/tournament/${tournamentId}`);
 
-  const groups = await prisma.group.findMany({
-    where: { tournamentId },
-    include: { teams: true },
-  });
+  const groups = await Group.find({ tournamentId }).lean();
   const qualifiers: string[] = [];
 
   for (const group of groups) {
-    const gMatches = groupMatches.filter((m) => m.groupId === group.id);
+    const gMatches = groupMatches.filter(
+      (m) => m.groupId?.toString() === group._id.toString()
+    );
     const standings = computeGroupStandings(
-      group.teams.map((gt) => gt.teamId),
-      gMatches
+      group.teamIds.map((id) => id.toString()),
+      gMatches.map((m) => ({
+        teamAId: m.teamAId?.toString() ?? "",
+        teamBId: m.teamBId?.toString() ?? null,
+        winnerId: m.winnerId?.toString() ?? null,
+      }))
     );
     qualifiers.push(...standings.slice(0, 2).map((s) => s.teamId));
   }
@@ -340,10 +337,11 @@ export async function generateKnockoutBracket(
       phase: "knockout" as const,
       round,
       bracketOrder: i / 2,
+      delegatedTeamIds: [],
     });
   }
 
-  await prisma.match.createMany({ data: matchData });
+  await Match.insertMany(matchData);
 
   const byeWinnerIds = matchData
     .filter((m) => m.teamBId === null)
@@ -363,10 +361,13 @@ async function advanceByeWinners(
   if (currentIdx === -1 || currentIdx >= rounds.length - 1) return;
 
   const nextRound = rounds[currentIdx + 1];
-  const currentMatches = await prisma.match.findMany({
-    where: { tournamentId, phase: "knockout", round: completedRound },
-    orderBy: [{ bracketOrder: "asc" }, { createdAt: "asc" }],
-  });
+  const currentMatches = await Match.find({
+    tournamentId,
+    phase: "knockout",
+    round: completedRound,
+  })
+    .sort({ bracketOrder: 1, createdAt: 1 })
+    .lean();
 
   const newMatches = [];
   for (let i = 0; i < currentMatches.length; i += 2) {
@@ -380,11 +381,12 @@ async function advanceByeWinners(
         phase: "knockout" as const,
         round: nextRound,
         bracketOrder: i / 2,
+        delegatedTeamIds: [],
       });
     }
   }
   if (newMatches.length > 0) {
-    await prisma.match.createMany({ data: newMatches });
+    await Match.insertMany(newMatches);
   }
 }
 
@@ -398,25 +400,23 @@ export async function renameTeam(
 
   const userId = session.user.id;
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: tournamentId },
-  });
+  await dbConnect();
+  const tournament = await Tournament.findById(tournamentId).lean();
   if (!tournament || tournament.status !== "open")
     redirect(`/tournament/${tournamentId}`);
 
-  const userTeam = await prisma.userTeam.findFirst({
-    where: { userId, teamId, team: { tournamentId } },
-  });
-  if (!userTeam) redirect(`/tournament/${tournamentId}`);
+  const team = await Team.findOne({
+    _id: teamId,
+    tournamentId,
+    userIds: userId,
+  }).lean();
+  if (!team) redirect(`/tournament/${tournamentId}`);
 
   const rawName = formData.get("teamName");
   const name =
     typeof rawName === "string" ? rawName.trim().slice(0, 50) : null;
 
-  await prisma.team.update({
-    where: { id: teamId },
-    data: { name: name || null },
-  });
+  await Team.findByIdAndUpdate(teamId, { name: name || null });
 
   redirect(`/tournament/${tournamentId}`);
 }
@@ -431,26 +431,20 @@ export async function delegateMatch(
 
   const userId = session.user.id;
 
-  const match = await prisma.match.findUnique({
-    where: { id: matchId },
-    include: { delegations: true },
-  });
+  await dbConnect();
+  const match = await Match.findById(matchId).lean();
   if (!match) redirect("/dashboard");
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: match.tournamentId },
-  });
+  const tournament = await Tournament.findById(match.tournamentId).lean();
   if (!tournament) redirect("/dashboard");
-  if (tournament.organizerUserId !== userId) redirect("/dashboard");
+  if (tournament.organizerUserId.toString() !== userId) redirect("/dashboard");
 
-  const alreadyDelegated = match.delegations.length > 0;
+  const alreadyDelegated = match.delegatedTeamIds.length > 0;
 
   if (alreadyDelegated) {
-    await prisma.matchDelegation.deleteMany({ where: { matchId } });
+    await Match.findByIdAndUpdate(matchId, { delegatedTeamIds: [] });
   } else {
-    await prisma.matchDelegation.createMany({
-      data: teamIds.map((teamId) => ({ matchId, teamId })),
-    });
+    await Match.findByIdAndUpdate(matchId, { delegatedTeamIds: teamIds });
   }
 
   redirect(`/tournament/${match.tournamentId}`);

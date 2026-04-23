@@ -10,11 +10,10 @@
  *   node scripts/seed-tournament.js --mode singles
  *   node scripts/seed-tournament.js --organizer carl@gmail.com
  *
- * Requires .env.local to be present with DATABASE_URL set.
+ * Requires .env.local to be present with MONGODB_URI set.
  */
 
-const { PrismaClient } = require("@prisma/client");
-const { PrismaPg } = require("@prisma/adapter-pg");
+const mongoose = require("mongoose");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
@@ -44,9 +43,36 @@ function generateJoinCode() {
   return code;
 }
 
+const UserSchema = new mongoose.Schema(
+  { email: { type: String, required: true, unique: true } },
+  { timestamps: true }
+);
+
+const TournamentSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    mode: { type: String, required: true },
+    status: { type: String, default: "open" },
+    isPublic: { type: Boolean, default: true },
+    joinCode: { type: String, required: true, unique: true },
+    organizerUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  },
+  { timestamps: true }
+);
+
+const TeamSchema = new mongoose.Schema(
+  {
+    tournamentId: { type: mongoose.Schema.Types.ObjectId, ref: "Tournament", required: true },
+    status: { type: String, default: "open" },
+    name: { type: String, default: null },
+    userIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  },
+  { timestamps: true }
+);
+
 async function main() {
-  if (!process.env.DATABASE_URL) {
-    console.error("Error: DATABASE_URL not set in .env.local");
+  if (!process.env.MONGODB_URI) {
+    console.error("Error: MONGODB_URI not set in .env.local");
     process.exit(1);
   }
 
@@ -76,16 +102,15 @@ async function main() {
   const allEmails = [...new Set(groups.flatMap((g) => g.emails))];
   console.log(`Parsed ${groups.length} group(s), ${allEmails.length} unique email(s)`);
 
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
-  const prisma = new PrismaClient({ adapter });
+  await mongoose.connect(process.env.MONGODB_URI);
+  const User = mongoose.model("User", UserSchema);
+  const Tournament = mongoose.model("Tournament", TournamentSchema);
+  const Team = mongoose.model("Team", TeamSchema);
 
   try {
-    // Resolve emails → user IDs
-    const userDocs = await prisma.user.findMany({
-      where: { email: { in: allEmails } },
-      select: { id: true, email: true },
-    });
-    const emailToId = Object.fromEntries(userDocs.map((u) => [u.email, u.id]));
+    // Resolve emails → user ObjectIds
+    const userDocs = await User.find({ email: { $in: allEmails } }).select("_id email");
+    const emailToId = Object.fromEntries(userDocs.map((u) => [u.email, u._id]));
 
     const missing = allEmails.filter((e) => !emailToId[e]);
     if (missing.length > 0) {
@@ -107,20 +132,18 @@ async function main() {
         console.error("Error: no users found in DB");
         process.exit(1);
       }
-      organizerId = first.id;
+      organizerId = first._id;
       console.log("Organizer (defaulting to first user):", first.email);
     }
 
     // Create tournament
-    const tournament = await prisma.tournament.create({
-      data: {
-        name: tournamentName,
-        mode,
-        organizerUserId: organizerId,
-        joinCode: generateJoinCode(),
-      },
+    const tournament = await Tournament.create({
+      name: tournamentName,
+      mode,
+      organizerUserId: organizerId,
+      joinCode: generateJoinCode(),
     });
-    console.log(`\nCreated tournament: "${tournamentName}" (${mode}) — id: ${tournament.id}`);
+    console.log(`\nCreated tournament: "${tournamentName}" (${mode}) — id: ${tournament._id}`);
 
     // Create teams
     let teamsCreated = 0;
@@ -137,17 +160,13 @@ async function main() {
           .map((e) => e.split("@")[0]);
 
         const isFullTeam = memberIds.length >= 2;
-        const teamMembers = isFullTeam ? memberIds.slice(0, 2) : memberIds;
+        const teamUserIds = isFullTeam ? memberIds.slice(0, 2) : memberIds;
 
-        const team = await prisma.team.create({
-          data: {
-            tournamentId: tournament.id,
-            name: group.name ?? null,
-            status: isFullTeam ? "full" : "open",
-            users: {
-              create: teamMembers.map((userId) => ({ userId })),
-            },
-          },
+        await Team.create({
+          tournamentId: tournament._id,
+          name: group.name ?? null,
+          status: isFullTeam ? "full" : "open",
+          userIds: teamUserIds,
         });
 
         const label = group.name
@@ -165,14 +184,10 @@ async function main() {
       for (const email of allEmails) {
         const userId = emailToId[email];
         if (!userId) continue;
-        await prisma.team.create({
-          data: {
-            tournamentId: tournament.id,
-            status: "full",
-            users: {
-              create: [{ userId }],
-            },
-          },
+        await Team.create({
+          tournamentId: tournament._id,
+          status: "full",
+          userIds: [userId],
         });
         console.log(`  Created team: ${email.split("@")[0]}`);
         teamsCreated++;
@@ -181,7 +196,7 @@ async function main() {
 
     console.log(`\nDone — ${teamsCreated} teams created in "${tournamentName}"`);
   } finally {
-    await prisma.$disconnect();
+    await mongoose.disconnect();
   }
 }
 

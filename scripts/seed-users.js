@@ -1,5 +1,5 @@
 /**
- * Seed users from scripts/data.txt into Supabase via Prisma.
+ * Seed users from scripts/data.txt into MongoDB via Mongoose.
  *
  * Each non-blank line in data.txt is treated as an email address.
  * Display name is derived from the part before the @.
@@ -9,11 +9,10 @@
  *   node scripts/seed-users.js
  *   node scripts/seed-users.js --password secret123
  *
- * Requires .env.local to be present with DATABASE_URL set.
+ * Requires .env.local to be present with MONGODB_URI set.
  */
 
-const { PrismaClient } = require("@prisma/client");
-const { PrismaPg } = require("@prisma/adapter-pg");
+const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
@@ -25,9 +24,18 @@ const passwordArg = process.argv.indexOf("--password");
 const password =
   passwordArg !== -1 ? process.argv[passwordArg + 1] : "password1";
 
+const UserSchema = new mongoose.Schema(
+  {
+    email: { type: String, required: true, unique: true },
+    passwordHash: { type: String, default: null },
+    displayName: { type: String, default: null },
+  },
+  { timestamps: true }
+);
+
 async function main() {
-  if (!process.env.DATABASE_URL) {
-    console.error("Error: DATABASE_URL not set in .env.local");
+  if (!process.env.MONGODB_URI) {
+    console.error("Error: MONGODB_URI not set in .env.local");
     process.exit(1);
   }
 
@@ -47,8 +55,8 @@ async function main() {
 
   console.log(`Found ${users.length} users in data.txt`);
 
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
-  const prisma = new PrismaClient({ adapter });
+  await mongoose.connect(process.env.MONGODB_URI);
+  const User = mongoose.model("User", UserSchema);
   const passwordHash = await bcrypt.hash(password, 10);
 
   let created = 0;
@@ -56,24 +64,22 @@ async function main() {
 
   try {
     for (const u of users) {
-      const exists = await prisma.user.findUnique({ where: { email: u.email } });
+      const exists = await User.findOne({ email: u.email });
       if (exists) {
         console.log("Skipped (exists):", u.email);
         skipped++;
         continue;
       }
-      await prisma.user.create({
-        data: {
-          email: u.email,
-          displayName: u.displayName,
-          passwordHash,
-        },
+      await User.create({
+        email: u.email,
+        displayName: u.displayName,
+        passwordHash,
       });
       console.log("Created:", u.email);
       created++;
     }
   } finally {
-    await prisma.$disconnect();
+    await mongoose.disconnect();
   }
 
   console.log(`\nDone — ${created} created, ${skipped} skipped`);

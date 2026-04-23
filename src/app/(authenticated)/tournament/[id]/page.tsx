@@ -1,7 +1,12 @@
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import prisma from "@/lib/prisma";
+import dbConnect from "@/lib/mongoose";
+import Tournament from "@/models/tournament";
+import Team from "@/models/team";
+import User from "@/models/user";
+import Group from "@/models/group";
+import Match from "@/models/match";
 import { buttonVariants } from "@/components/ui/button";
 import { Users, ArrowLeft, Trophy, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,32 +33,44 @@ export default async function TournamentPage({
 
   const userId = session.user.id;
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { id },
-  });
-  if (!tournament) notFound();
+  await dbConnect();
+  const tournamentRaw = await Tournament.findById(id).lean();
+  if (!tournamentRaw) notFound();
+
+  const tournament = {
+    id: tournamentRaw._id.toString(),
+    name: tournamentRaw.name,
+    mode: tournamentRaw.mode,
+    status: tournamentRaw.status,
+    path: tournamentRaw.path ?? null,
+    isPublic: tournamentRaw.isPublic,
+    joinCode: tournamentRaw.joinCode,
+    organizerUserId: tournamentRaw.organizerUserId.toString(),
+    winnerTeamId: tournamentRaw.winnerTeamId?.toString() ?? null,
+  };
 
   const isOrganizer = tournament.organizerUserId === userId;
 
-  const teams = await prisma.team.findMany({
-    where: { tournamentId: id },
-    include: { users: { select: { userId: true } } },
-  });
+  const teamsRaw = await Team.find({ tournamentId: id }).lean();
+
+  // Normalize teams: preserve users as [{ userId }] for compatibility with helper fns
+  const teams = teamsRaw.map((t) => ({
+    id: t._id.toString(),
+    status: t.status,
+    name: t.name ?? null,
+    users: t.userIds.map((uid) => ({ userId: uid.toString() })),
+  }));
+
   const fullTeams = teams.filter((t) => t.status === "full");
   const openTeams = teams.filter((t) => t.status === "open");
 
   const allUserIds = teams.flatMap((t) => t.users.map((u) => u.userId));
-  const users = await prisma.user.findMany({
-    where: { id: { in: allUserIds } },
-    select: { id: true, displayName: true, email: true },
-  });
+  const usersRaw = await User.find({ _id: { $in: allUserIds } }).lean();
   const userMap: Record<string, string> = Object.fromEntries(
-    users.map((u) => [u.id, u.displayName || u.email.split("@")[0]])
+    usersRaw.map((u) => [u._id.toString(), u.displayName || u.email.split("@")[0]])
   );
 
-  const myTeam = teams.find((t) =>
-    t.users.some((u) => u.userId === userId)
-  );
+  const myTeam = teams.find((t) => t.users.some((u) => u.userId === userId));
   const myTeamId = myTeam?.id;
   const isInTournament = !!myTeam;
   const canLeave = isInTournament && tournament.status === "open";
@@ -79,15 +96,27 @@ export default async function TournamentPage({
   const startAction = startTournament.bind(null, id);
   const advanceAction = advanceToKnockout.bind(null, id);
 
-  const groups = await prisma.group.findMany({
-    where: { tournamentId: id },
-    include: { teams: { select: { teamId: true } } },
-  });
-  const matches = await prisma.match.findMany({
-    where: { tournamentId: id },
-    include: { delegations: { select: { teamId: true } } },
-    orderBy: [{ bracketOrder: "asc" }, { createdAt: "asc" }],
-  });
+  const groupsRaw = await Group.find({ tournamentId: id }).lean();
+  const groups = groupsRaw.map((g) => ({
+    id: g._id.toString(),
+    name: g.name,
+    teams: g.teamIds.map((tid) => ({ teamId: tid.toString() })),
+  }));
+
+  const matchesRaw = await Match.find({ tournamentId: id })
+    .sort({ bracketOrder: 1, createdAt: 1 })
+    .lean();
+  const matches = matchesRaw.map((m) => ({
+    id: m._id.toString(),
+    groupId: m.groupId?.toString() ?? null,
+    teamAId: m.teamAId?.toString() ?? "",
+    teamBId: m.teamBId?.toString() ?? null,
+    winnerId: m.winnerId?.toString() ?? null,
+    phase: m.phase,
+    round: m.round ?? null,
+    bracketOrder: m.bracketOrder ?? null,
+    delegations: m.delegatedTeamIds.map((tid) => ({ teamId: tid.toString() })),
+  }));
 
   const groupMatches = matches.filter((m) => m.phase === "group");
   const knockoutMatches = matches.filter((m) => m.phase === "knockout");

@@ -1,8 +1,9 @@
 "use server";
 
 import { auth } from "@/auth";
-import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import dbConnect from "@/lib/mongoose";
+import QuickGame from "@/models/quick-game";
 
 async function generateQuickGameJoinCode(): Promise<string> {
   const chars = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -12,7 +13,7 @@ async function generateQuickGameJoinCode(): Promise<string> {
       for (let i = 0; i < len; i++) {
         code += chars[Math.floor(Math.random() * chars.length)];
       }
-      const existing = await prisma.quickGame.findUnique({ where: { joinCode: code } });
+      const existing = await QuickGame.findOne({ joinCode: code });
       if (!existing) return code;
     }
   }
@@ -25,10 +26,9 @@ export async function createQuickGame(): Promise<QuickGameActionResult> {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated." };
 
+  await dbConnect();
   const joinCode = await generateQuickGameJoinCode();
-  await prisma.quickGame.create({
-    data: { joinCode, creatorId: session.user.id },
-  });
+  await QuickGame.create({ joinCode, creatorId: session.user.id });
 
   revalidatePath("/dashboard");
   return null;
@@ -38,17 +38,17 @@ export async function joinQuickGame(code: string): Promise<QuickGameActionResult
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated." };
 
-  const game = await prisma.quickGame.findUnique({
-    where: { joinCode: code.toLowerCase().trim() },
-  });
+  await dbConnect();
+  const game = await QuickGame.findOne({ joinCode: code.toLowerCase().trim() }).lean();
 
   if (!game) return { error: "Invalid code." };
-  if (game.creatorId === session.user.id) return { error: "You cannot join your own game." };
+  if (game.creatorId.toString() === session.user.id)
+    return { error: "You cannot join your own game." };
   if (game.status !== "waiting") return { error: "This game is no longer available." };
 
-  await prisma.quickGame.update({
-    where: { id: game.id },
-    data: { opponentId: session.user.id, status: "active" },
+  await QuickGame.findByIdAndUpdate(game._id, {
+    opponentId: session.user.id,
+    status: "active",
   });
 
   revalidatePath("/dashboard");
@@ -59,12 +59,13 @@ export async function cancelQuickGame(gameId: string): Promise<QuickGameActionRe
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated." };
 
-  const game = await prisma.quickGame.findUnique({ where: { id: gameId } });
+  await dbConnect();
+  const game = await QuickGame.findById(gameId).lean();
   if (!game) return { error: "Game not found." };
-  if (game.creatorId !== session.user.id) return { error: "Not authorized." };
+  if (game.creatorId.toString() !== session.user.id) return { error: "Not authorized." };
   if (game.status !== "waiting") return { error: "Cannot cancel an active game." };
 
-  await prisma.quickGame.delete({ where: { id: gameId } });
+  await QuickGame.findByIdAndDelete(gameId);
 
   revalidatePath("/dashboard");
   return null;
@@ -77,22 +78,23 @@ export async function recordQuickGameResult(
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated." };
 
-  const game = await prisma.quickGame.findUnique({ where: { id: gameId } });
+  await dbConnect();
+  const game = await QuickGame.findById(gameId).lean();
   if (!game) return { error: "Game not found." };
   if (game.status !== "active") return { error: "Game is not active." };
 
   const userId = session.user.id;
-  if (game.creatorId !== userId && game.opponentId !== userId) {
+  const creatorId = game.creatorId.toString();
+  const opponentId = game.opponentId?.toString() ?? null;
+
+  if (creatorId !== userId && opponentId !== userId) {
     return { error: "Not authorized." };
   }
-  if (winnerId !== game.creatorId && winnerId !== game.opponentId) {
+  if (winnerId !== creatorId && winnerId !== opponentId) {
     return { error: "Invalid winner." };
   }
 
-  await prisma.quickGame.update({
-    where: { id: gameId },
-    data: { winnerId, status: "complete" },
-  });
+  await QuickGame.findByIdAndUpdate(gameId, { winnerId, status: "complete" });
 
   revalidatePath("/dashboard");
   revalidatePath("/rankings");

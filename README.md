@@ -1,6 +1,6 @@
 # Rackit
 
-A Pool Tournament App. Create and manage tournaments with group stage round-robin and single elimination knockout. Built with Next.js 16, Supabase PostgreSQL, Prisma, and NextAuth.js.
+A Pool Tournament App. Create and manage tournaments with group stage round-robin and single elimination knockout. Built with Next.js 16, MongoDB Atlas, Mongoose, and NextAuth.js.
 
 Live: https://rackit.vercel.app
 
@@ -8,12 +8,9 @@ Live: https://rackit.vercel.app
 
 ## Getting Started
 
-### 1. Create a Supabase project
+### 1. Create a MongoDB Atlas cluster
 
-Go to [supabase.com](https://supabase.com), create a new project, then grab two connection strings from **Connect → ORM Third Party → Prisma**:
-
-- **Transaction pooler** (port 6543) → `DATABASE_URL`
-- **Direct connection** (port 5432) → `DIRECT_URL`
+Go to [cloud.mongodb.com](https://cloud.mongodb.com), create a free cluster, then grab the connection string from **Database → Connect → Drivers**.
 
 ### 2. Configure environment variables
 
@@ -23,20 +20,19 @@ Copy `.env.example` to `.env.local` and fill in your values:
 cp .env.example .env.local
 ```
 
-Generate `NEXTAUTH_SECRET` with:
+| Variable | Description |
+|---|---|
+| `MONGODB_URI` | Atlas connection string (`mongodb+srv://...`) |
+| `NEXTAUTH_SECRET` | Random string — generate with `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | `http://localhost:3000` for local dev |
 
-```bash
-openssl rand -base64 32
-```
-
-### 3. Install dependencies and create the database schema
+### 3. Install dependencies
 
 ```bash
 npm install
-npx prisma migrate dev --name init
 ```
 
-`prisma migrate dev` creates the migration files and applies the schema to your Supabase database. The generated `prisma/migrations/` folder is committed so Vercel can replay migrations on deploy.
+No migration step needed — Mongoose creates collections automatically on first use.
 
 ### 4. Run the development server
 

@@ -1,7 +1,10 @@
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import prisma from "@/lib/prisma";
+import dbConnect from "@/lib/mongoose";
+import Tournament from "@/models/tournament";
+import Team from "@/models/team";
+import User from "@/models/user";
 import { buttonVariants } from "@/components/ui/button";
 import { Users, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,16 +22,20 @@ export default async function JoinTournamentPage({
 
   const userId = session.user.id;
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { id },
-  });
-  if (!tournament) notFound();
-  if (tournament.status !== "open") redirect("/dashboard");
+  await dbConnect();
+  const tournamentRaw = await Tournament.findById(id).lean();
+  if (!tournamentRaw) notFound();
+  if (tournamentRaw.status !== "open") redirect("/dashboard");
 
-  const existingTeam = await prisma.userTeam.findFirst({
-    where: { userId, team: { tournamentId: id } },
-  });
+  const existingTeam = await Team.findOne({ tournamentId: id, userIds: userId }).lean();
   if (existingTeam) redirect("/dashboard");
+
+  const tournament = {
+    id: tournamentRaw._id.toString(),
+    name: tournamentRaw.name,
+    mode: tournamentRaw.mode,
+    status: tournamentRaw.status,
+  };
 
   if (tournament.mode === "singles") {
     const joinAction = joinSingles.bind(null, id);
@@ -59,27 +66,35 @@ export default async function JoinTournamentPage({
     );
   }
 
-  const [openTeams, fullTeams] = await Promise.all([
-    prisma.team.findMany({
-      where: { tournamentId: id, status: "open" },
-      include: { users: { select: { userId: true } } },
-    }),
-    prisma.team.findMany({
-      where: { tournamentId: id, status: "full" },
-      include: { users: { select: { userId: true } } },
-    }),
+  const [openTeamsRaw, fullTeamsRaw] = await Promise.all([
+    Team.find({ tournamentId: id, status: "open" }).lean(),
+    Team.find({ tournamentId: id, status: "full" }).lean(),
   ]);
+
+  // Normalize to match expected shape: users: [{ userId }]
+  const openTeams = openTeamsRaw.map((t) => ({
+    id: t._id.toString(),
+    name: t.name ?? null,
+    status: t.status,
+    users: t.userIds.map((uid) => ({ userId: uid.toString() })),
+  }));
+  const fullTeams = fullTeamsRaw.map((t) => ({
+    id: t._id.toString(),
+    name: t.name ?? null,
+    status: t.status,
+    users: t.userIds.map((uid) => ({ userId: uid.toString() })),
+  }));
 
   const allPlayerIds = [
     ...openTeams.map((t) => t.users[0]?.userId).filter(Boolean) as string[],
     ...fullTeams.flatMap((t) => t.users.map((u) => u.userId)),
   ];
-  const partners = await prisma.user.findMany({
-    where: { id: { in: allPlayerIds } },
-    select: { id: true, displayName: true, email: true },
-  });
+  const partners = await User.find({ _id: { $in: allPlayerIds } }).lean();
   const partnerMap = Object.fromEntries(
-    partners.map((u) => [u.id, u.displayName || u.email.split("@")[0]])
+    partners.map((u) => [
+      u._id.toString(),
+      u.displayName || u.email.split("@")[0],
+    ])
   );
 
   const startAction = startHalfTeam.bind(null, id);
