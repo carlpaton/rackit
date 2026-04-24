@@ -18,7 +18,9 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
 
-const DATA_FILE = path.join(__dirname, "data.txt");
+const DATA_FILE = getArg("--data", null)
+  ? path.resolve(getArg("--data", null))
+  : path.join(__dirname, "data.txt");
 
 function getArg(flag, defaultVal) {
   const i = process.argv.indexOf(flag);

@@ -18,7 +18,11 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
 
-const DATA_FILE = path.join(__dirname, "data.txt");
+const dataArg = process.argv.indexOf("--data");
+const DATA_FILE =
+  dataArg !== -1
+    ? path.resolve(process.argv[dataArg + 1])
+    : path.join(__dirname, "data.txt");
 
 const passwordArg = process.argv.indexOf("--password");
 const password =

@@ -28,6 +28,12 @@ export async function SiteHeader() {
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-4">
           <Link
+            href={isLoggedIn ? "/dashboard" : "/"}
+            className="text-sm text-chalk/60 hover:text-chalk transition-colors"
+          >
+            Dashboard
+          </Link>
+          <Link
             href="/how-it-works"
             className="text-sm text-chalk/60 hover:text-chalk transition-colors"
           >
@@ -53,6 +59,12 @@ export async function SiteHeader() {
               Rankings
             </Link>
           )}
+          <Link
+            href="/suggestions"
+            className="text-sm text-chalk/60 hover:text-chalk transition-colors"
+          >
+            Suggestions
+          </Link>
           {isLoggedIn ? (
             <>
               {displayName && (

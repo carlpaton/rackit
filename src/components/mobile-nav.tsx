@@ -32,6 +32,9 @@ export function MobileNav({ isLoggedIn, displayName, logoutAction }: Props) {
           />
           {/* dropdown */}
           <div className="absolute right-4 top-14 z-50 min-w-44 bg-surface border border-white/10 rounded-xl shadow-xl py-2 flex flex-col">
+            <NavLink href={isLoggedIn ? "/dashboard" : "/"} onClick={() => setOpen(false)}>
+              Dashboard
+            </NavLink>
             <NavLink href="/how-it-works" onClick={() => setOpen(false)}>
               How it works
             </NavLink>
@@ -46,6 +49,9 @@ export function MobileNav({ isLoggedIn, displayName, logoutAction }: Props) {
                 Rankings
               </NavLink>
             )}
+            <NavLink href="/suggestions" onClick={() => setOpen(false)}>
+              Suggestions
+            </NavLink>
             {isLoggedIn ? (
               <>
                 {displayName && (
